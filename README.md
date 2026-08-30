@@ -1,70 +1,82 @@
 # Danish Housing
 
-**See what is happening in Danish real estate.**
+**See what is happening in Danish real estate.** Thirty-four years of Danish
+house prices, selling times and supply — every kommune, every quarter, on one
+map.
 
-An interactive map of the Danish housing market: prices, selling times,
-transaction volume and supply for every kommune, region and landsdel, from
-1992 to today. Built on free public data from Finans Danmark and Danmarks
-Statistik.
+### → [huiyuleo.github.io/Danish-Housing](https://huiyuleo.github.io/Danish-Housing/)
 
-**→ [huiyuleo.github.io/Danish-Housing](https://huiyuleo.github.io/Danish-Housing/)**
-
-It is a market observatory, not a listings site. There is no property search,
-no valuation, no advice about buying or selling.
+![The map, showing price per square metre by kommune](docs/img/map-light.png)
 
 ---
 
-## Features
+## What the data says
 
-- **Map of all of Denmark** at three official levels — 11 landsdele, 5 regioner,
-  98 kommuner — with six measures: price, price growth, days on market,
-  transaction volume, quarters of supply, and the gap between asking and
-  realised prices.
-- **A 34-year timeline** with playback, from 1992Q1 to the latest quarter.
-- **Inflation-adjusted prices.** Nominal prices are up 232% since 1995; in real
-  kroner the rise is 84%. The toggle matters more than it sounds.
-- **Two clocks.** Realised sale prices are quarterly — that is the only
-  frequency they exist at. Listings (stock, asking price, days waiting) are
-  monthly and run four months ahead. The map switches between them rather than
-  pretending they are one series.
-- **Market Movers** — fastest rising and falling, accelerating, cooling,
-  heating up, stalling.
-- **114 area pages** with full history charts, one per kommune, region and
-  landsdel.
-- **Grey is a first-class state.** Areas with too few sales are drawn neutral
-  and hatched, and never show a number.
-- Light, dark and system themes. Works on mobile.
+A few things fall out of this data that are hard to see any other way.
+
+**Denmark has not recovered from 2007.** Nominal prices passed the old peak
+years ago. Adjust for inflation and the country as a whole is still 4% below
+where it was in 2007 — nineteen years later. **81 of 97 kommuner** are below
+their own real peak; Vordingborg is down 40%.
+
+**The gap is enormous.** A square metre in Frederiksberg costs **17×** what one
+in Lolland does — 88,282 kr against 5,120 kr. Zealand as a whole runs 2.9× the
+median in Jutland.
+
+**Selling time varies more than price.** A house takes 60 days to sell in
+Egedal and 326 in Morsø. The national median is 138 days. Selling time also
+moves *before* price does, which is why it is a headline measure here rather
+than a footnote.
+
+**Some markets run backwards.** In Frederikshavn houses are up 7.6% while flats
+are down 9.9%, in the same year, in the same town.
+
+Scrub the timeline back to 2009 and you can watch the last crash arrive from
+the east — Zealand deep in blue while west Jutland was still rising:
+
+![The 2009 crash: Zealand falling, Jutland still rising](docs/img/map-crisis.png)
+
+## What you can do with it
+
+- Switch between **11 landsdele, 5 regioner and 98 kommuner** — all published
+  levels, none aggregated by hand.
+- Six measures: price, growth, days on market, transaction volume, quarters of
+  supply, and the gap between asking and realised prices.
+- **Play the timeline** from 1992 to today.
+- **Adjust for inflation.** Prices are up 232% since 1995 in nominal kroner and
+  84% in real ones. That toggle changes most conclusions.
+- **Switch clocks.** Sale prices are quarterly — the only frequency they exist
+  at. Listings are monthly and run four months ahead.
+- Open any of **114 area pages** for full history and charts.
+- Grey means *we don't know*. Areas with too few sales are drawn neutral and
+  never show a number — [see why](docs/data-notes.md).
+
+![An area page for København](docs/img/area.png)
 
 ## Data
 
+Everything comes from two free public sources. No scraping, no API key, no
+estimated or modelled prices.
+
 | Source | Tables | What it gives |
 |---|---|---|
-| [Finans Danmark](https://www.finansdanmark.dk/) Boligmarkedsstatistik | `BM010`/`BM011`, `BM020`/`BM021`, `BM030`/`BM031` | Quarterly prices, volumes, time on market — 1992Q1 onward |
-| Finans Danmark supply statistics | `UDB010`, `UDB020`, `UDB030` | Monthly listings — 2004M01 onward |
+| [Finans Danmark](https://www.finansdanmark.dk/) Boligmarkedsstatistik | `BM010`/`BM011`, `BM020`/`BM021`, `BM030`/`BM031` | Quarterly prices, volumes, time on market — from 1992Q1 |
+| Finans Danmark supply statistics | `UDB010`, `UDB020`, `UDB030` | Monthly listings — from 2004M01 |
 | [Danmarks Statistik](https://www.dst.dk/) | `PRIS113` | Consumer price index, for the inflation adjustment |
-| [DAWA](https://dawadocs.dataforsyningen.dk/) (Styrelsen for Dataforsyning og Infrastruktur) | — | Administrative boundaries |
+| [DAWA](https://dawadocs.dataforsyningen.dk/) | — | Administrative boundaries |
 
-All of it is free and needs no API key. Served through Danmarks Statistik's
-[Statistikbanken API](https://www.dst.dk/en/Statistik/brug-statistikken/muligheder-i-statistikbanken/api).
-
-Some quirks in this data will quietly ruin a chart if you do not know about
-them — a zero that means "missing", two series that start a decade apart, and
-postal codes that do not nest inside municipalities. They are written up in
-**[docs/data-notes.md](docs/data-notes.md)**, and the reader-facing version
-lives on the site's [Data & methods](https://huiyuleo.github.io/Danish-Housing/methods/)
+This data has traps in it. A zero in the time-on-market table means *no sale
+that quarter*, not *sold in zero days* — 28% of the values are zeros, and
+taking them at face value paints every quiet rural area as the hottest market
+in Denmark. Prices start in 1992 but transaction counts start in 2004. Postal
+codes do not nest inside municipalities. All of it is written up in
+**[docs/data-notes.md](docs/data-notes.md)**; the reader-facing version is on
+the site's [Data & methods](https://huiyuleo.github.io/Danish-Housing/methods/)
 page.
 
-## Tech
+## Run it
 
-Next.js 16 · TypeScript · MapLibre GL · Observable Plot · DuckDB WASM
-
-No backend and no database. The whole dataset is a few megabytes of Parquet
-served as static files; DuckDB WASM queries it in the browser over HTTP range
-requests. The site is a static export that runs on any static host.
-
-## Getting started
-
-Requires Node 20+ and Python 3.10+.
+Node 20+, and Python 3.10+ if you want to refresh the data.
 
 ```bash
 git clone https://github.com/HUIYULEO/Danish-Housing.git
@@ -73,92 +85,51 @@ npm install
 npm run dev
 ```
 
-The committed data is enough to run the site — the ETL is only needed to
-refresh it.
-
-### Refreshing the data
-
-Quarterly, when Finans Danmark publishes.
+The committed data is enough to run the site. To pull fresh numbers when
+Finans Danmark publishes a new quarter:
 
 ```bash
 pip install requests pandas pyarrow
-npm run etl        # ~3 min: pulls every table, rebuilds the panels
-npm run simplify   # boundaries -> public/geo, simplified to well under 500 KB
+npm run etl        # ~3 min, rebuilds every panel
+npm run simplify   # boundaries -> public/geo
 ```
 
-Then commit whatever changed under `public/data` and `public/geo`.
+Then commit what changed under `public/`. Run the ETL on your own machine —
+sandboxed shells generally cannot reach `api.statbank.dk`.
 
-> **Run the ETL on your own machine, not in a sandboxed shell.** Cowork's cloud
-> container and desktop VM both have outbound allowlists that cannot reach
-> `api.statbank.dk`.
+## How it works
 
-`npm run etl` also writes [`data/REPORT.md`](data/REPORT.md), a coverage
-diagnostic showing how much of the map each property type can actually fill.
+Next.js · TypeScript · MapLibre GL · Observable Plot · DuckDB WASM
 
-## Scripts
+There is no backend and no database. The dataset is a few megabytes of Parquet
+served as static files, and DuckDB WASM queries it in the browser over HTTP
+range requests. The map paints from an 84 KB snapshot before the query engine
+has finished loading, so the first screen does not wait on it.
 
-| | |
+Deploys as a static export to any static host. GitHub Pages is wired up in
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) — push to `main`
+and it ships. See **[docs/deploying.md](docs/deploying.md)** for base paths,
+transfer sizes and why Cloudflare Pages might suit it better.
+
+| script | |
 |---|---|
 | `npm run dev` | Dev server |
-| `npm run build` | Production build (Node/Vercel; sets cache headers) |
+| `npm run build` | Production build |
 | `npm run build:static` | Static export to `out/` |
-| `npm run typecheck` | `tsc --noEmit` |
 | `npm run etl` | Rebuild all data from the APIs |
-| `npm run simplify` | Simplify DAWA boundaries for the web |
-
-## Deployment
-
-Static export, so it runs anywhere. GitHub Pages is wired up in
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml) — push to `main`
-and it deploys.
-
-For a project site served from `/<repo>/`, set the base path:
-
-```bash
-BASE_PATH=/Danish-Housing npm run build:static
-```
-
-Runtime asset paths go through `lib/paths.ts`; do not hardcode `/data`, `/geo`
-or `/duckdb` in components, because Next's `basePath` does not rewrite `fetch`
-calls.
-
-**Sizes.** The deployed site is ~88 MB, but 75 MB of that is the two DuckDB
-WASM bundles and a modern browser only ever downloads one of them. A cold visit
-transfers roughly 8–9 MB: under 1 MB to first paint with the map already drawn,
-then the 6.9 MB query engine in the background. Parquet is already
-zstd-compressed, so host gzip does nothing for it.
-
-That puts GitHub Pages' 100 GB/month soft limit at around 11k cold visits.
-Cloudflare Pages has no bandwidth cap and honours the `_headers` file, so it is
-the better home if this gets shared around.
-
-## Project layout
-
-```
-dk_housing_etl.py     ETL: APIs -> Parquet panels + REPORT.md
-app/                  Next.js routes: map, /methods, /area/[code]
-components/           Map, timeline, movers, charts, controls
-lib/
-  metrics.ts          Measure definitions, colour scales, sample-size tiers
-  queries.ts          Parameterised queries — the only place SQL is written
-  db.ts               DuckDB WASM setup
-public/data/          Parquet + JSON the browser reads
-public/geo/           Simplified boundaries
-docs/                 PRD and data notes
-```
+| `npm run simplify` | Simplify boundaries for the web |
+| `npm run typecheck` | `tsc --noEmit` |
 
 ## Attribution
 
 Housing market data: **Finans Danmark**, Boligmarkedsstatistikken, via Danmarks
-Statistik. Administrative boundaries: **Styrelsen for Dataforsyning og
-Infrastruktur** (DAWA). Danish place names are kept in Danish.
+Statistik. Boundaries: **Styrelsen for Dataforsyning og Infrastruktur** (DAWA).
+Danish place names are kept in Danish.
 
-This is a data visualisation project. It is not a valuation, a forecast, or
-advice about buying or selling a home.
+This is a data visualisation project — not a valuation, a forecast, or advice
+about buying or selling a home.
 
 ## License
 
-No license has been chosen yet, so all rights are reserved by default — if you
-want others to be able to use this, add one. Note that the underlying data
-carries its own terms from Finans Danmark and Danmarks Statistik, separate from
-whatever applies to this code.
+[MIT](LICENSE) for the code. The underlying data carries its own terms from
+Finans Danmark and Danmarks Statistik.

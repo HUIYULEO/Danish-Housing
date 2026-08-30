@@ -2,7 +2,7 @@
   "name": "dk-housing",
   "version": "0.2.0",
   "private": true,
-  "description": "Danish real estate market intelligence \u2014 see what is happening in Danish real estate.",
+  "description": "Danish real estate market intelligence — see what is happening in Danish real estate.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,7 +13,8 @@
     "duckdb:sync": "node scripts/sync-duckdb.mjs",
     "simplify": "node scripts/simplify-geo.mjs",
     "postinstall": "node scripts/sync-duckdb.mjs",
-    "build:static": "node scripts/build-static.mjs"
+    "build:static": "node scripts/build-static.mjs",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.29.0",
@@ -33,5 +34,6 @@
   },
   "overrides": {
     "adm-zip": "^0.6.0"
-  }
+  },
+  "license": "MIT"
 }
