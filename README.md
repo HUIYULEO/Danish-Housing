@@ -158,6 +158,7 @@ advice about buying or selling a home.
 
 ## License
 
-Not yet chosen — see [#1](https://github.com/HUIYULEO/Danish-Housing/issues).
-Until one is added, all rights are reserved. Note that the underlying data has
-its own terms set by Finans Danmark and Danmarks Statistik.
+No license has been chosen yet, so all rights are reserved by default — if you
+want others to be able to use this, add one. Note that the underlying data
+carries its own terms from Finans Danmark and Danmarks Statistik, separate from
+whatever applies to this code.
