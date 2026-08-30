@@ -1,0 +1,37 @@
+{
+  "name": "dk-housing",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Danish real estate market intelligence \u2014 see what is happening in Danish real estate.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "etl": "python dk_housing_etl.py",
+    "duckdb:sync": "node scripts/sync-duckdb.mjs",
+    "simplify": "node scripts/simplify-geo.mjs",
+    "postinstall": "node scripts/sync-duckdb.mjs",
+    "build:static": "node scripts/build-static.mjs"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "1.29.0",
+    "@observablehq/plot": "^0.6.17",
+    "apache-arrow": "^17.0.0",
+    "maplibre-gl": "^4.7.1",
+    "next": "16.3.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "mapshaper": "^0.6.102",
+    "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0"
+  }
+}

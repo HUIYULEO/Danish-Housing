@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dk-housing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "dk-housing-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/serve-static.mjs"
+      ],
+      "port": 4321,
+      "url": "http://localhost:4321"
+    }
+  ]
+}
