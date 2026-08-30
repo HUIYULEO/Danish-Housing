@@ -743,6 +743,45 @@ def build_facts(outdir: Path, webdir: Path) -> str:
             + "".join(f"  - {f['label']} — {f['value']}\n" for f in facts))
 
 
+def reconcile_names(outdir: Path, webdir: Path) -> None:
+    """地名以 DAWA 为准，覆盖 DST 的写法。
+
+    实测两边只差一个：DST 写 "Århus"，DAWA 写 "Aarhus"。
+    这个城市 2011 年正式改回 Aa 拼写，DAWA 是现行行政区划的权威登记，
+    所以听 DAWA 的。
+
+    不改的话同一个 kommune 会在界面上出现两种拼法 ——
+    地图悬浮提示读的是 geojson（DAWA），侧栏和详情页读的是 areas.json（DST）。
+    丹麦人一眼就会看出来。
+    """
+    af = outdir / "areas.json"
+    if not af.exists():
+        return
+    areas = json.loads(af.read_text("utf-8"))
+    dawa: dict[str, str] = {}
+    for name in ("kommuner", "regioner", "landsdele"):
+        gf = webdir.parent / "geo" / f"{name}.geojson"
+        if not gf.exists():
+            continue
+        for f in json.loads(gf.read_text("utf-8"))["features"]:
+            code = f["properties"].get("code")
+            if code:
+                dawa[code] = f["properties"]["name"]
+
+    fixed = []
+    for a in areas:
+        want = dawa.get(a["code"])
+        # landsdel 那一层保留 DST 的 "Landsdel Xxx" 前缀（界面上靠它区分层级），
+        # 只对 kommune 做拼写对齐
+        if want and a["level"] == "kommune" and want != a["name"]:
+            fixed.append((a["name"], want))
+            a["name"] = want
+    if fixed:
+        af.write_text(json.dumps(areas, ensure_ascii=False), "utf-8")
+        for old, new in fixed:
+            print(f"  地名对齐 DAWA: {old} -> {new}")
+
+
 def _write_version(webdir: Path, quarter: str) -> None:
     """按 Parquet 内容算一个短哈希，前端请求时带 ?v=。
 
@@ -783,6 +822,7 @@ def export_web(outdir: Path, webdir: Path) -> str:
         raw = dst.stat().st_size
         lines.append(f"| panel_{level}.parquet | {raw/1e6:.2f} MB | ~{raw/1e6/3:.2f} MB |")
         print(f"  web: panel_{level}.parquet  {raw/1e6:.2f} MB")
+    reconcile_names(outdir, webdir)
     for name in ("areas.json",):
         (webdir / name).write_bytes((outdir / name).read_bytes())
 
