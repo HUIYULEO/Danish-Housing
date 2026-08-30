@@ -39,6 +39,38 @@ const GEO_SRC: Record<GeoLevel, string> = {
 
 const geoUrl = (l: GeoLevel) => asset(GEO_SRC[l]);
 
+type BBox = [number, number, number, number];
+
+/** 走一遍坐标算 bbox。只在换层级时跑一次，98 个多边形没什么代价。 */
+function bboxOf(geometry: GeoJSON.Geometry): BBox | null {
+  let w = 180, s = 90, e = -180, n = -90;
+  const walk = (c: unknown): void => {
+    if (typeof (c as number[])[0] === "number") {
+      const [x, y] = c as number[];
+      if (x < w) w = x;
+      if (x > e) e = x;
+      if (y < s) s = y;
+      if (y > n) n = y;
+      return;
+    }
+    for (const k of c as unknown[]) walk(k);
+  };
+  if (!("coordinates" in geometry)) return null;
+  walk(geometry.coordinates);
+  return e > w && n > s ? [w, s, e, n] : null;
+}
+
+function indexBBoxes(geo: GeoJSON.FeatureCollection): Map<string, BBox> {
+  const out = new Map<string, BBox>();
+  for (const f of geo.features) {
+    const code = f.properties?.code as string | undefined;
+    if (!code || !f.geometry) continue;
+    const b = bboxOf(f.geometry);
+    if (b) out.set(code, b);
+  }
+  return out;
+}
+
 export interface AreaMeta {
   code: string;
   name: string;
@@ -85,6 +117,43 @@ function cssVar(name: string, fallback: string): string {
 }
 const FIT_PADDING = { top: 28, bottom: 28, left: 28, right: 28 };
 
+/** 聚焦时至少要拉近这么多档，否则"点了没反应"。约等于放大两倍。 */
+const MIN_FOCUS_STEP = 1.1;
+/** 再近就只剩街道了，对一张统计地图没意义。 */
+const MAX_FOCUS_ZOOM = 9.2;
+
+/**
+ * 聚焦时的留白。左上角压着说明卡片、左下角压着图例，
+ * 不把这两块让出来的话，选中的区域会正好躲在卡片后面。
+ *
+ * 每一边都按画布尺寸夹一次。**留白一旦吃满画布，cameraForBounds 会返回
+ * NaN 的中心点，镜头就一动不动，看着像功能没做。**
+ * 地图区域在矮窗口、手机横屏下真的会只有两三百像素高。
+ */
+function focusPadding(m: MlMap) {
+  const cv = m.getCanvas();
+  const w = cv.clientWidth || 1;
+  const h = cv.clientHeight || 1;
+  const wide = w >= 700;
+  return {
+    left: Math.min(wide ? 430 : 30, w * 0.35),
+    right: Math.min(60, w * 0.15),
+    top: Math.min(wide ? 60 : 140, h * 0.25),
+    bottom: Math.min(wide ? 120 : 140, h * 0.25),
+  };
+}
+
+/** cameraForBounds 在留白过大等情况下会给出 NaN，用之前必须验一遍 */
+function usableCamera(cam: { center?: unknown; zoom?: number } | null | undefined) {
+  if (!cam || typeof cam.zoom !== "number" || !Number.isFinite(cam.zoom)) {
+    return false;
+  }
+  const c = cam.center as { lng?: number; lat?: number } | undefined;
+  const lng = c?.lng ?? (Array.isArray(c) ? c[0] : undefined);
+  const lat = c?.lat ?? (Array.isArray(c) ? c[1] : undefined);
+  return Number.isFinite(lng) && Number.isFinite(lat);
+}
+
 export default function MarketMap({
   rows,
   metric,
@@ -101,6 +170,7 @@ export default function MarketMap({
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const resizeObs = useRef<ResizeObserver | null>(null);
+  const bboxes = useRef<Map<string, BBox>>(new Map());
   const [ready, setReady] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
@@ -154,6 +224,7 @@ export default function MarketMap({
       m.addImage("hatch", makeHatch(palette(theme).grayLine), { pixelRatio: 2 });
 
       const geo = await fetch(geoUrl(levelRef.current)).then((r) => r.json());
+      bboxes.current = indexBBoxes(geo);
       m.addSource("kom", {
         type: "geojson",
         data: geo,
@@ -286,6 +357,7 @@ export default function MarketMap({
       .then((geo) => {
         if (!alive || !map.current) return;
         (m.getSource("kom") as maplibregl.GeoJSONSource).setData(geo);
+        bboxes.current = indexBBoxes(geo);
         loadedLevel.current = level;
         m.fitBounds(DK_BOUNDS, { padding: FIT_PADDING, animate: false });
       })
@@ -407,7 +479,7 @@ export default function MarketMap({
     }
   }, [rows, metric, domains, category, ready, areaNames, theme]);
 
-  /* ---------------- 选中态 ---------------- */
+  /* ---------------- 选中态 + 聚焦 ---------------- */
   const prevSel = useRef<string | null>(null);
   useEffect(() => {
     const m = map.current;
@@ -421,6 +493,31 @@ export default function MarketMap({
     if (selected) {
       m.setFeatureState({ source: "kom", id: selected }, { selected: true });
     }
+
+    // 从侧栏点一个区域名，光描个边框是不够的 —— 98 个 kommune 里
+    // 认出被高亮的那个本身就很费劲。所以镜头跟过去。
+    if (selected) {
+      const b = bboxes.current.get(selected);
+      if (b) {
+        const cam = m.cameraForBounds(b, { padding: focusPadding(m) });
+        if (usableCamera(cam)) {
+          // 上下限都要卡：不卡下限的话，选一个很大的 landsdel 镜头几乎不动，
+          // 看着像没反应；不卡上限的话，选 Frederiksberg 会一头扎到街道级别。
+          const base = m.getZoom();
+          const z = Math.min(
+            MAX_FOCUS_ZOOM,
+            Math.max(cam!.zoom ?? base, base + MIN_FOCUS_STEP),
+          );
+          m.easeTo({ center: cam!.center, zoom: z, duration: 600 });
+        }
+      }
+    } else if (prevSel.current) {
+      // 只在"刚刚取消选中"时退回全国视图。挂载时 selected 本来就是 null，
+      // 那时候不该动镜头（初始 fitBounds 已经做过了）。
+      const home = m.cameraForBounds(DK_BOUNDS, { padding: FIT_PADDING });
+      if (usableCamera(home)) m.easeTo({ ...home!, duration: 500 });
+    }
+
     prevSel.current = selected;
   }, [selected, ready]);
 

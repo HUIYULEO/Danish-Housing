@@ -6,7 +6,7 @@ map.
 
 ### → [huiyuleo.github.io/Danish-Housing](https://huiyuleo.github.io/Danish-Housing/)
 
-![The map, showing price per square metre by kommune](docs/img/map-light.png)
+![Year-on-year house price growth by kommune, 2026 Q1](docs/img/map-light.png)
 
 ---
 
@@ -40,6 +40,7 @@ the east — Zealand deep in blue while west Jutland was still rising:
 
 - Switch between **11 landsdele, 5 regioner and 98 kommuner** — all published
   levels, none aggregated by hand.
+- Click any area in the rankings and the map flies to it.
 - Six measures: price, growth, days on market, transaction volume, quarters of
   supply, and the gap between asking and realised prices.
 - **Play the timeline** from 1992 to today.
