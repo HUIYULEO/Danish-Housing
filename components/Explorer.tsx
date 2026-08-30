@@ -74,7 +74,10 @@ export default function Explorer({
   const [freq, setFreq] = useState<Frequency>("quarter");
   const [level, setLevel] = useState<GeoLevel>("kommune");
   const [category, setCategory] = useState<Category>("house");
-  const [metricId, setMetricId] = useState<MetricId>("price");
+  // 默认看增长率而不是价格水平。价格水平那张图三十年来的形状几乎不变
+  // —— 哥本哈根一直最贵，西日德兰一直最便宜，看一眼就没什么可看的了。
+  // 增长率每个季度都在变，而且 snapshot 里就有 yoy_pct，首屏照样不用等 DuckDB。
+  const [metricId, setMetricId] = useState<MetricId>("growth");
   const [windowId, setWindowId] = useState<WindowId>("4Q");
   const [quarter, setQuarter] = useState(latestQuarter);
   const [month, setMonth] = useState(months[months.length - 1] ?? "");
