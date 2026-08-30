@@ -1,0 +1,20 @@
+# Cloudflare Pages / Netlify 认这个文件；GitHub Pages 不认（它设不了响应头）。
+#
+# 静态导出下 next.config 里的 headers() 是不生效的，所以缓存策略挪到这里。
+# 不影响正确性：Parquet 的 URL 带内容哈希（?v=，见 lib/paths.ts + version.json），
+# 数据换了 URL 就换；没有这个文件也只是少一层缓存优化。
+
+/data/version.json
+  Cache-Control: no-store
+
+# URL 带内容哈希，可以放心 immutable
+/data/*.parquet
+  Cache-Control: public, max-age=31536000, immutable
+
+# 文件名即版本
+/duckdb/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 边界只在行政区划调整时才变
+/geo/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

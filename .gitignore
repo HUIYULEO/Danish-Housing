@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.env*.local
+
+# ETL 的中间产物，全部可以用 npm run etl 重新生成，不进仓库。
+# 浏览器要的那份在 public/data 下面，那个才提交。
+# 唯一保留的是 REPORT.md —— 它是覆盖率诊断，属于文档。
+data/*.geojson
+data/*.parquet
+data/postnumre.json
+data/kommuner.json
+data/areas.json
+
+# DuckDB 的 wasm + worker 一共 77 MB。不进仓库：
+# npm install 的 postinstall 会从 node_modules 确定性地复制过来。
+public/duckdb/
+
+# 静态导出产物
+out/

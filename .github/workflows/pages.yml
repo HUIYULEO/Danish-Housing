@@ -1,0 +1,68 @@
+# 部署到 GitHub Pages。
+#
+# 仓库 Settings -> Pages -> Source 选 "GitHub Actions"，然后推 main 就会自动发。
+#
+# 注意两件事：
+#
+# 1. ETL 不在 CI 里跑。api.statbank.dk 是可以从 GitHub runner 访问的，但数据是
+#    季度更新的，没必要每次推代码都拉一遍 20 MB。public/data 和 public/geo
+#    是提交进仓库的产物（加起来约 8 MB）。数据更新时在本机跑 npm run etl，
+#    然后把 public/ 下的产物一起提交。
+#
+# 2. DuckDB 的 wasm（77 MB）**不提交**，postinstall 会从 node_modules 复制过来。
+#    提交进去会让仓库体积失控，而且它每次 npm install 都能确定性地重新生成。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall 会把 duckdb 的 wasm/worker 同步到 public/duckdb
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      # 项目站点挂在 /<repo>/ 下面，所以要带 basePath。
+      # 用户站点（<user>.github.io）或自定义域名的话，把这两行的值改成空字符串。
+      - name: Build static export
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}
+        run: npm run build:static
+
+      # Pages 默认会跑 Jekyll，那会吃掉下划线开头的目录（_next 首当其冲）
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
