@@ -537,6 +537,7 @@ button {
 /* ---------- 图例 ---------- */
 
 .legend {
+  min-width: 276px;
   background: color-mix(in srgb, var(--paper-2) 95%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -554,18 +555,33 @@ button {
   margin-bottom: 7px;
 }
 
-.legend__bar {
-  height: 9px;
-  border-radius: 1px;
-  border: 1px solid var(--line);
+/* 离散色块。块之间留一条头发丝的缝，看得出是"档"而不是渐变。 */
+.legend__bins {
+  display: flex;
+  gap: 1px;
+  height: 13px;
 }
 
-.legend__ticks {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px;
+.legend__bin {
+  flex: 1;
+  min-width: 0;
+  border-radius: 1px;
+}
+
+/* 刻度定位在色块之间的缝上，所以用绝对定位而不是 space-between */
+.legend__scale {
+  position: relative;
+  height: 14px;
+  margin-top: 3px;
+  font-size: 10px;
   color: var(--ink-2);
-  margin-top: 5px;
+}
+
+.legend__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .legend__gray {

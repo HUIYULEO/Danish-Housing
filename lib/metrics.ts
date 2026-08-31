@@ -450,10 +450,94 @@ export function unitToValue(
   return lo + (hi - lo) * t;
 }
 
+/* ------------------------------------------------------------------ *
+ * 分档
+ *
+ * 地图用**离散色块**而不是连续渐变。渐变好看，但看图的人没法把一块颜色
+ * 还原成一个数 —— 只能读出"比旁边深一点"。分档之后每块颜色对应一个
+ * 写在图例上的区间，可以直接读数。纽约联储那张房价地图就是这么做的
+ * （PRD §12 把它列为参考方向）。
+ * ------------------------------------------------------------------ */
+
+/**
+ * 1 / 2 / 2.5 / 5 / 10 那一族"好看的数"。
+ *
+ * 往**下**取，不往上取。往上取的话 ±26% 的值域会得到 10% 的步长、
+ * 分界一直铺到 ±40%，而实际数据只落在 ±20% 以内 —— 结果 98 个 kommune
+ * 挤在中间两档里，等于白分。往下取得到 5%，分界到 ±20%，
+ * 外面两档是开区间，正好接住尾巴。
+ */
+function niceStep(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  const step = norm >= 10 ? 10 : norm >= 5 ? 5 : norm >= 2.5 ? 2.5 : norm >= 2 ? 2 : 1;
+  return step * mag;
+}
+
+export interface Bins {
+  /** 分界值，升序 */
+  breaks: number[];
+  /** breaks.length + 1 个颜色，第 i 个对应 breaks[i-1] 到 breaks[i] */
+  colors: string[];
+}
+
+/**
+ * 给一个指标算出分档。
+ *
+ * 发散型（增长率、议价空间）在 0 两侧对称分档，**0 必须正好是一个分界**，
+ * 否则"涨一点"和"跌一点"会共用一块颜色，这在房价图上是不能接受的。
+ * 单调型沿各自的变换（log / sqrt）等距分档，再把分界圆整成好看的数。
+ */
+export function binsFor(
+  metric: Metric,
+  domain: [number, number] | undefined,
+  theme: Theme = "light",
+): Bins | null {
+  if (!domain) return null;
+  const [lo, hi] = domain;
+  if (!(hi > lo)) return null;
+  const pal = PALETTES[theme];
+
+  if (metric.kind === "diverging") {
+    // 每侧四档，0 居中。±26% 会得到 ±5 / ±10 / ±15 / ±20。
+    const per = 4;
+    const step = niceStep(Math.max(Math.abs(lo), Math.abs(hi)) / per);
+    const breaks = Array.from({ length: per * 2 + 1 }, (_, i) => (i - per) * step);
+    const colors = Array.from({ length: breaks.length + 1 }, (_, i) =>
+      ramp(pal.div, i / breaks.length),
+    );
+    return { breaks, colors: metric.invert ? colors.slice().reverse() : colors };
+  }
+
+  const n = 6;
+  const raw = Array.from({ length: n - 1 }, (_, i) =>
+    unitToValue(metric, (i + 1) / n, lo, hi),
+  );
+  const breaks: number[] = [];
+  for (const v of raw) {
+    const st = niceStep(Math.abs(v) / 2 || 1);
+    const r = Math.round(v / st) * st;
+    if (!breaks.length || r > breaks[breaks.length - 1]) breaks.push(r);
+  }
+  if (!breaks.length) return null;
+  const colors = Array.from({ length: breaks.length + 1 }, (_, i) =>
+    ramp(pal.seq, i / breaks.length),
+  );
+  return { breaks, colors: metric.invert ? colors.slice().reverse() : colors };
+}
+
+/** 值落在哪一档 */
+export function binIndex(breaks: number[], v: number): number {
+  let i = 0;
+  while (i < breaks.length && v >= breaks[i]) i++;
+  return i;
+}
+
 /**
  * 一个单元最终画什么颜色。
- * 值域超出两端就 clamp —— Frederiksberg 的 88,000 kr/m² 是真实的离群值，
- * 让它把整条色阶拉平会毁掉其它 97 个 kommune 的可读性。
+ * 超出两端归进最外面那一档 —— Frederiksberg 的 88,000 kr/m² 是真实的
+ * 离群值，让它把整条色阶拉平会毁掉其它 97 个 kommune 的可读性。
  */
 export function colorFor(
   metric: Metric,
@@ -462,24 +546,10 @@ export function colorFor(
   theme: Theme = "light",
 ): string {
   const pal = PALETTES[theme];
-  if (value == null || !Number.isFinite(value) || !domain) return pal.gray;
-  const [lo, hi] = domain;
-  if (hi === lo) return pal.gray;
-  let t = toUnit(metric, value, lo, hi);
-  if (metric.invert) t = 1 - t;
-  return ramp(metric.kind === "diverging" ? pal.div : pal.seq, t);
-}
-
-/** 图例的渐变条。色阶在色带上是等距铺开的，所以这里直接线性取样 ——
- *  变换体现在刻度文字上（见 Legend 的中点刻度），不在色带本身。 */
-export function legendGradient(metric: Metric, theme: Theme = "light"): string {
-  const pal = PALETTES[theme];
-  const stops = metric.kind === "diverging" ? pal.div : pal.seq;
-  const list = Array.from({ length: 24 }, (_, i) => {
-    const t = i / 23;
-    return ramp(stops, metric.invert ? 1 - t : t);
-  });
-  return `linear-gradient(90deg, ${list.join(", ")})`;
+  if (value == null || !Number.isFinite(value)) return pal.gray;
+  const bins = binsFor(metric, domain, theme);
+  if (!bins) return pal.gray;
+  return bins.colors[binIndex(bins.breaks, value)] ?? pal.gray;
 }
 
 /** 涨跌染色用在排行榜数字上，和地图的发散色阶保持一致。 */

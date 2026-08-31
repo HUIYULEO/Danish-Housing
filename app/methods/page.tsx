@@ -306,11 +306,17 @@ export default function Methods() {
             faster fake one.
           </li>
           <li>
-            <strong>Colour scales are fixed across time.</strong> They are set
-            once from the 2nd–98th percentile over all quarters since 2004, so
-            that scrubbing the timeline shows the market actually heating and
-            cooling. Extreme areas are clamped to the ends of the scale rather
-            than being allowed to flatten everyone else.
+            <strong>
+              Colours are banded, and the bands are fixed across time.
+            </strong>{" "}
+            The map uses discrete classes rather than a smooth gradient, so a
+            colour on the map can be matched to a numbered band in the legend
+            and read back as a value. The bands are set once from the 2nd–98th
+            percentile over all quarters since 2004 — not recomputed each
+            quarter — so scrubbing the timeline shows the market actually
+            heating and cooling rather than just reshuffling the ranking. Areas
+            beyond either end fall into the outermost band instead of
+            stretching the scale flat for everyone else.
           </li>
           <li>
             <strong>Postal codes do not nest inside kommuner.</strong> About 23%
