@@ -64,7 +64,7 @@ estimated or modelled prices.
 | [Finans Danmark](https://www.finansdanmark.dk/) Boligmarkedsstatistik | `BM010`/`BM011`, `BM020`/`BM021`, `BM030`/`BM031` | Quarterly prices, volumes, time on market — from 1992Q1 |
 | Finans Danmark supply statistics | `UDB010`, `UDB020`, `UDB030` | Monthly listings — from 2004M01 |
 | [Danmarks Statistik](https://www.dst.dk/) | `PRIS113` | Consumer price index, for the inflation adjustment |
-| [DAWA](https://dawadocs.dataforsyningen.dk/) | — | Administrative boundaries |
+| DAWA (closed 1 October 2026) | — | Administrative boundaries, frozen at the last extract |
 
 This data has traps in it. A zero in the time-on-market table means *no sale
 that quarter*, not *sold in zero days* — 28% of the values are zeros, and
@@ -92,7 +92,6 @@ Finans Danmark publishes a new quarter:
 ```bash
 pip install requests pandas pyarrow
 npm run etl        # ~3 min, rebuilds every panel
-npm run simplify   # boundaries -> public/geo
 ```
 
 Then commit what changed under `public/`. Run the ETL on your own machine —
@@ -118,7 +117,7 @@ transfer sizes and why Cloudflare Pages might suit it better.
 | `npm run build` | Production build |
 | `npm run build:static` | Static export to `out/` |
 | `npm run etl` | Rebuild all data from the APIs |
-| `npm run simplify` | Simplify boundaries for the web |
+| `npm run simplify` | Re-simplify raw boundaries, if you have them in `data/` |
 | `npm run typecheck` | `tsc --noEmit` |
 
 ## Attribution

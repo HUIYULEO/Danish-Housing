@@ -6,18 +6,21 @@ next-env.d.ts
 .vercel
 .env*.local
 
-# ETL 的中间产物，全部可以用 npm run etl 重新生成，不进仓库。
-# 浏览器要的那份在 public/data 下面，那个才提交。
-# 唯一保留的是 REPORT.md —— 它是覆盖率诊断，属于文档。
+# ETL intermediates; all of them can be regenerated with npm run etl and stay
+# out of the repo. The copy the browser needs is under public/data, and that
+# one is committed. The only thing kept is REPORT.md: it is the coverage
+# diagnostic and counts as documentation. postnumre.json is kept too: it is
+# the last extract DAWA served before it closed and cannot be downloaded again.
 data/*.geojson
 data/*.parquet
-data/postnumre.json
 data/kommuner.json
 data/areas.json
 
-# DuckDB 的 wasm + worker 一共 77 MB。不进仓库：
-# npm install 的 postinstall 会从 node_modules 确定性地复制过来。
+# DuckDB's wasm + worker total 77 MB. Kept out of the repo: the postinstall
+# of npm install copies them deterministically from node_modules.
 public/duckdb/
 
-# 静态导出产物
+# Static export output
 out/
+
+__pycache__/

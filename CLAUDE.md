@@ -2,7 +2,7 @@
 
 丹麦房地产市场可视化。Real Estate Market Intelligence，不是房源搜索或估值产品。
 
-规格看 `docs/PRD-v0.2.md`。数据坑看 `README.md`。ETL 是 `dk_housing_etl.py`。
+规格看 `docs/PRD-v0.2.md`。数据坑看 `README.md`。ETL 入口是 `dk_housing_etl.py`，实现在 `etl/` 包里。
 
 ## 开工前必读的四件事
 
