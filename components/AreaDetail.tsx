@@ -187,7 +187,9 @@ export default function AreaDetail({
               ? "Kommune"
               : level === "region"
                 ? "Region"
-                : "Landsdel"}{" "}
+                : level === "postnr"
+                  ? "Postal district"
+                  : "Landsdel"}{" "}
             · {quarterLabel(latestQuarter)}
             {latest && RELIABILITY_NOTE[latest.reliability as Reliability] && (
               <span className="detail__flag">
