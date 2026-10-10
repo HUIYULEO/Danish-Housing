@@ -2,16 +2,19 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import snapshot from "../../public/data/snapshot.json";
 import type { PanelRow } from "@/lib/metrics";
+import { pageUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Data & methods — Danish Housing",
   description:
     "Sources, definitions, sample-size rules and known limits behind the Danish housing map.",
+  alternates: { canonical: pageUrl("/methods/") },
 };
 
 /**
- * PRD §12：对一个靠可信度立足的产品，这一页不是可选项。
- * 页面上的覆盖率数字直接从 snapshot 算，不写死 —— 数据一更新文案就跟着变。
+ * PRD §12: for a product that stands on credibility, this page is not
+ * optional. The coverage numbers on it are computed straight from the
+ * snapshot, not hard-coded, so the copy follows the data on every update.
  */
 export default function Methods() {
   const rows = snapshot.rows as PanelRow[];
@@ -40,6 +43,7 @@ export default function Methods() {
         </div>
         <nav className="masthead__nav">
           <Link href="/">Map</Link>
+          <Link href="/areas">All areas</Link>
         </nav>
       </header>
 

@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Observable Plot 的 React 外壳。
+ * A React shell around Observable Plot.
  *
- * Plot 是"生成一个 DOM 节点"的 API，不是 React 组件，所以这里的活就是：
- * 在 effect 里生成、塞进容器、下次渲染前把上一个删掉。
- * 不这么做的话每次重渲都会往容器里堆一个新的 svg。
+ * Plot is a "produce a DOM node" API, not a React component, so the job here
+ * is: create it in an effect, put it in the container, and remove the
+ * previous one before the next render. Otherwise every re-render would
+ * stack another svg into the container.
  *
- * 颜色全部从 CSS 变量读，这样亮暗主题切换时图表跟着走，
- * 不需要把整套调色板再在 JS 里写一遍。
+ * All colours are read from CSS variables, so the charts follow light/dark
+ * theme switches without the palette being written out again in JS.
  */
 
 import { useEffect, useRef } from "react";
@@ -28,8 +29,9 @@ export default function Chart({
   caption,
   deps = [],
 }: {
-  /** 返回 Plot.plot 的配置。用函数而不是对象，是为了让它在
-   *  effect 里执行 —— 那时候才读得到 CSS 变量。 */
+  /** Returns the config for Plot.plot. A function rather than an object so
+   *  that it runs inside the effect, the only point where the CSS variables
+   *  can be read. */
   options: () => Plot.PlotOptions;
   height?: number;
   caption?: string;
@@ -50,7 +52,8 @@ export default function Chart({
     return () => {
       node?.remove();
     };
-    // options 每次渲染都是新函数，不能进依赖数组，靠 deps 显式控制
+    // options is a new function on every render and cannot go in the
+    // dependency array; deps controls it explicitly
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
@@ -62,7 +65,7 @@ export default function Chart({
   );
 }
 
-/** 所有图表共用的坐标轴和网格样式，省得每张图都写一遍 */
+/** Axis and grid styles shared by every chart, so each one need not repeat them */
 export function plotBase(width: number, height: number): Plot.PlotOptions {
   return {
     width,

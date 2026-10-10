@@ -1,17 +1,19 @@
 "use client";
 
 /**
- * 时间轴。拖动和播放全部是本地的 —— 面板已经在浏览器里了，不走网络。
+ * The timeline. Dragging and playback are entirely local: the panel is
+ * already in the browser, so nothing goes over the network.
  *
- * 播放速度定在 260ms/季度：太快看不清 2007-2009 的转折，
- * 太慢又没有"动起来"的观感。
+ * Playback speed is set at 260ms per quarter: any faster and the 2007-2009
+ * turn is a blur, any slower and it no longer feels like motion.
  */
 
 import { useEffect, useRef } from "react";
 import { monthLabel, quarterLabel } from "@/lib/metrics";
 
 const STEP_MS = 260;
-// 月度一年十二格，用同样的节奏放完二十年要一分钟，所以月度放快一倍
+// Monthly has twelve steps a year; at the same pace twenty years would take
+// a minute, so monthly plays twice as fast
 const STEP_MS_MONTH = 130;
 
 export default function Timeline({
@@ -39,11 +41,13 @@ export default function Timeline({
   const label = (t: string) => (monthly ? monthLabel(t) : quarterLabel(t));
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 播放时逐季推进，到末尾自动停。
+  // Playback advances one step at a time and stops at the end.
   //
-  // 起点：默认停在最新季度，那已经是终点了。所以按播放时如果已经在末尾，
-  // 就从头开始放 —— 用户按播放是想看整段变化，不是想让它一动不动。
-  // 这个跳转在 onPlayToggle 之前发生，见下面的 handlePlay。
+  // Starting point: the default position is the latest quarter, which is
+  // already the end. So if play is pressed at the end, start over from the
+  // beginning: the user pressed play to watch the whole change, not to see
+  // it stand still. The jump happens before onPlayToggle; see handlePlay
+  // below.
   useEffect(() => {
     if (!playing || disabled) return;
     timer.current = setInterval(() => {
@@ -64,9 +68,9 @@ export default function Timeline({
     onPlayToggle();
   };
 
-  // 刻度密度跟着跨度走：十年视图每两年一个，全量视图每十年一个，
-  // 两种情况下轴上的字数差不多
-  // 刻度密度跟着跨度和频率走，两种情况下轴上的字数差不多
+  // Tick density follows the span and the frequency: one every two years in
+  // the ten-year view, one every ten years in the full view, so the amount
+  // of text on the axis is about the same either way
   const every = span === "10y" ? 2 : 10;
   const isJan = (t: string) => (monthly ? t.endsWith("M01") : t.endsWith("Q1"));
   const marks = quarters
@@ -110,7 +114,8 @@ export default function Timeline({
           onChange={(e) => onChange(quarters[Number(e.target.value)])}
         />
         <div className="timeline__marks" aria-hidden>
-          {/* 当前停在哪一年，光看滑块位置不够明确，这里再标一条竖线 */}
+          {/* The slider position alone does not make the current year clear
+              enough, so mark it with a vertical line as well */}
           <span
             className="timeline__cursor"
             style={{ left: `${(i / Math.max(1, quarters.length - 1)) * 100}%` }}

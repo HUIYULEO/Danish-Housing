@@ -3,16 +3,19 @@
 import { binsFor, type Domains, type Metric, type Theme } from "@/lib/metrics";
 
 /**
- * 图例。离散色块，每块之间标出分界值。
+ * The legend. Discrete colour blocks with the break value marked between
+ * each pair.
  *
- * 为什么不用渐变条：渐变条只能告诉你"越深越大"，没法把地图上的某一块颜色
- * 还原成一个数。分档之后可以 —— 看到一块颜色，在图例上找到同色的块，
- * 直接读出它对应的区间。参考纽约联储的房价地图（PRD §12 列的方向）。
+ * Why not a gradient bar: a gradient bar can only say "darker is larger" and
+ * cannot turn a patch of map colour back into a number. Classes can: see a
+ * colour, find the same block on the legend, and read off its range. Modelled
+ * on the New York Fed's house price map (the direction listed in PRD §12).
  *
- * 两件必须交代清楚的事：
- *   1. 两端是开区间，所以最外面两档没有外侧刻度 —— 超出值域的单元
- *      归进最外档，不是被丢掉。
- *   2. 灰色和色阶是并列关系，不是色阶的一端。
+ * Two things that have to be made clear:
+ *   1. Both ends are open-ended, so the two outermost classes have no outer
+ *      tick. Units beyond the domain go into the outermost class; they are
+ *      not dropped.
+ *   2. Grey sits alongside the ramp; it is not one end of it.
  */
 export default function Legend({
   metric,
@@ -52,9 +55,10 @@ export default function Legend({
         ))}
       </div>
 
-      {/* 刻度落在色块之间的缝上，不是色块中心。
-          分界多的时候隔一个标一个，否则 262px 里塞九个标签会糊成一片；
-          发散型必须保证 0 被标出来，那是整张图的参照点。 */}
+      {/* Ticks sit on the gaps between blocks, not at block centres.
+          With many breaks only every other one is labelled, or nine labels
+          in 262px blur together. Diverging metrics must always have 0
+          labelled: it is the reference point of the whole map. */}
       <div className="legend__scale num">
         {breaks.map((b, i) => {
           const every = breaks.length > 6 ? 2 : 1;

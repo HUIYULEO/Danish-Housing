@@ -1,6 +1,7 @@
-// 用最笨的静态服务器把 out/ 端出来，模拟 GitHub Pages：
-// 不设任何自定义响应头，只支持 Range（Pages 背后的 Fastly 也支持）。
-// 用来验证"没有 COOP/COEP 的纯静态托管，DuckDB 还能不能跑"。
+// The dumbest possible static server for out/, imitating GitHub Pages:
+// no custom response headers, only Range support (Fastly behind Pages
+// supports it too). Used to verify "does DuckDB still run on pure static
+// hosting without COOP/COEP".
 import { createServer } from "node:http";
 import { createReadStream, statSync, existsSync } from "node:fs";
 import { extname, join, normalize } from "node:path";

@@ -1,18 +1,22 @@
 "use client";
 
 /**
- * 页面顶部的轮播条。
+ * The rotating strip at the top of the page.
  *
- * 里面混着两种东西，所以每一条都带一个来源标签，不能让人混淆：
+ * It mixes two kinds of things, so every item carries a source label and
+ * they cannot be confused:
  *
- *   Jul 2026 · listings   月度挂牌数据（UDB010/020/030）。比下面的季度地图新四个月，
- *                         但只有挂牌侧的量 —— 在售套数、要价、已挂天数。
- *                         免费数据里**没有月度成交价**，这里也绝不假装有。
- *   Worth knowing         Fun Facts（PRD §8），从季度面板算出来的结构性事实，
- *                         只用 reliability=ok 的单元。
+ *   Jul 2026 · listings   Monthly listing data (UDB010/020/030). Four months
+ *                         fresher than the quarterly map below, but only
+ *                         listing-side measures: homes for sale, asking
+ *                         price, days listed. The free data has **no monthly
+ *                         sale prices**, and this never pretends otherwise.
+ *   Worth knowing         Fun Facts (PRD §8): structural facts computed from
+ *                         the quarterly panel, reliability=ok units only.
  *
- * 做成一次只显示一条的轮播而不是跑马灯：跑马灯适合塞很多数字，
- * 但这里有一半是句子，移动的句子没人读得完。
+ * It shows one item at a time rather than scrolling as a marquee: a marquee
+ * suits lots of numbers, but half of these are sentences, and nobody can
+ * finish reading a moving sentence.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -34,7 +38,7 @@ interface Item {
   label: string;
   value: string;
   delta?: number;
-  /** true = 数值下降才是"热"（天数、库存），染色要反过来 */
+  /** true = a falling value is the "hot" direction (days, inventory), so the colouring is inverted */
   invert?: boolean;
 }
 
@@ -76,7 +80,7 @@ export default function Ticker({
         {it.tag}
       </div>
 
-      {/* aria-live 只播报当前这一条，不会把整串都念一遍 */}
+      {/* aria-live announces only the current item, not the whole list */}
       <div className="ticker__viewport" aria-live="polite">
         <span className="ticker__item" key={i}>
           {it.label} <b className="num">{it.value}</b>
@@ -128,9 +132,11 @@ function build(monthly: Monthly, facts: Facts): Item[] {
         invert: true,
       });
     if (cur.asking_price != null)
-      // UDB020 是 kr/m²，不是总价（实测 Lolland 7,301 / Frederiksberg 114,346，
-      // 和各自的成交 kr/m² 完全对得上）。它衡量的是**在售存量**的要价，
-      // 天然高于成交价：贵的房子挂得久，便宜的卖得快，剩下的就是没卖掉那批。
+      // UDB020 is kr/m², not total price (measured: Lolland 7,301 /
+      // Frederiksberg 114,346, fully consistent with each one's realised
+      // kr/m²). It measures the asking price of the **standing stock**,
+      // which is naturally above sale prices: expensive homes linger, cheap
+      // ones sell fast, and what remains is the unsold lot.
       out.push({
         tag,
         label: "They are asking, on average",

@@ -1,14 +1,17 @@
 "use client";
 
 /**
- * 主地图。MapLibre GL，没有底图瓦片。
+ * The main map. MapLibre GL, with no basemap tiles.
  *
- * 不挂 OSM/卫星底图是有意的：这是一张统计图，不是导航地图。
- * 底图会和 choropleth 抢注意力，而且要么要 API key 要么要外部依赖。
- * 画面上只有丹麦的形状和数据的颜色。
+ * Leaving out an OSM/satellite basemap is deliberate: this is a statistical
+ * map, not a navigation map. A basemap would compete with the choropleth
+ * for attention and would need either an API key or an external dependency.
+ * The only things on screen are the shape of Denmark and the colour of the
+ * data.
  *
- * 涂色走 feature-state 而不是重建 GeoJSON：时间轴拖动时每季度只更新
- * 98 个 feature 的 state，几何完全不动，所以是本地毫秒级的。
+ * Colouring goes through feature-state rather than rebuilding the GeoJSON:
+ * when the timeline is dragged, each quarter only updates the state of 98
+ * features and the geometry is untouched, so it takes local milliseconds.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -27,21 +30,31 @@ import {
   type Theme,
 } from "@/lib/metrics";
 
-/** 三个行政层级各自的边界文件。数据全在同一张 kommune 面板里，
- *  因为 BM010/020/030 的 OMR20 本来就含 region 和 landsdel 的行。 */
-export type GeoLevel = "landsdel" | "region" | "kommune";
+/** The boundary file for each of the four levels.
+ *
+ * Data for the first three levels sits in the same kommune panel, because
+ * the OMR20 dimension of BM010/020/030 already contains region and landsdel
+ * rows. postnr uses another panel (BM011/021/031).
+ *
+ * postnumre.geojson has been dissolved: inner Copenhagen's 1050-1999 are 486
+ * polygons in DAWA, while BM011 only publishes three cells, 1000 / 1500 /
+ * 1800. The merge rule is written in scripts/simplify-geo.mjs and in
+ * postnr_bucket() in etl/geo.py; the two must agree, or the map gets
+ * a hole in the most densely populated part of Denmark. */
+export type GeoLevel = "landsdel" | "region" | "kommune" | "postnr";
 
 const GEO_SRC: Record<GeoLevel, string> = {
   landsdel: "/geo/landsdele.geojson",
   region: "/geo/regioner.geojson",
   kommune: "/geo/kommuner.geojson",
+  postnr: "/geo/postnumre.geojson",
 };
 
 const geoUrl = (l: GeoLevel) => asset(GEO_SRC[l]);
 
 type BBox = [number, number, number, number];
 
-/** 走一遍坐标算 bbox。只在换层级时跑一次，98 个多边形没什么代价。 */
+/** Walk the coordinates to compute a bbox. Runs once per level change; 98 polygons cost nothing. */
 function bboxOf(geometry: GeoJSON.Geometry): BBox | null {
   let w = 180, s = 90, e = -180, n = -90;
   const walk = (c: unknown): void => {
@@ -101,12 +114,15 @@ interface HoverInfo {
 const DK_BOUNDS: [number, number, number, number] = [7.5, 54.4, 15.4, 57.9];
 
 /**
- * 建图那一刻的海水色直接从 CSS 变量读，不从 React 的 theme state 读。
+ * At map creation the sea colour is read straight from the CSS variable, not
+ * from React's theme state.
  *
- * 原因是时序：theme state 第一帧一定是 "light"（服务端渲染不知道系统偏好），
- * 要等 matchMedia 的 effect 跑完才变成 dark。而地图在那之前就建好了，
- * 背景层会先刷一块浅色。CSS 变量在首帧就已经是对的了（data-theme 由
- * layout 里的内联脚本在绘制前落好，prefers-color-scheme 更是立即生效）。
+ * The reason is timing: the theme state is always "light" on the first frame
+ * (server rendering cannot know the system preference) and only turns dark
+ * after the matchMedia effect has run. The map is built before that, so a
+ * background layer would first flash a light colour. The CSS variable is
+ * already correct on the first frame (data-theme is set before paint by the
+ * inline script in layout, and prefers-color-scheme applies immediately).
  */
 function cssVar(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
@@ -117,18 +133,25 @@ function cssVar(name: string, fallback: string): string {
 }
 const FIT_PADDING = { top: 28, bottom: 28, left: 28, right: 28 };
 
-/** 聚焦时至少要拉近这么多档，否则"点了没反应"。约等于放大两倍。 */
+/** Focusing must zoom in by at least this much, or it looks like "clicked
+ *  and nothing happened". Roughly a 2x zoom. */
 const MIN_FOCUS_STEP = 1.1;
-/** 再近就只剩街道了，对一张统计地图没意义。 */
+/** Any closer and only streets are left, which means nothing on a statistical map.
+ *  The postal level gets one more step: a postal code is only a tenth the
+ *  size of a kommune to begin with. */
 const MAX_FOCUS_ZOOM = 9.2;
+const MAX_FOCUS_ZOOM_POSTNR = 10.6;
 
 /**
- * 聚焦时的留白。左上角压着说明卡片、左下角压着图例，
- * 不把这两块让出来的话，选中的区域会正好躲在卡片后面。
+ * Padding when focusing. The info card sits over the top left and the legend
+ * over the bottom left; unless those two areas are kept clear, the selected
+ * area ends up hiding right behind the card.
  *
- * 每一边都按画布尺寸夹一次。**留白一旦吃满画布，cameraForBounds 会返回
- * NaN 的中心点，镜头就一动不动，看着像功能没做。**
- * 地图区域在矮窗口、手机横屏下真的会只有两三百像素高。
+ * Each side is clamped against the canvas size. **Once the padding eats the
+ * whole canvas, cameraForBounds returns a NaN centre and the camera does not
+ * move at all, which looks like the feature was never built.**
+ * In short windows and on phones in landscape, the map area really can be
+ * only two or three hundred pixels tall.
  */
 function focusPadding(m: MlMap) {
   const cv = m.getCanvas();
@@ -143,7 +166,8 @@ function focusPadding(m: MlMap) {
   };
 }
 
-/** cameraForBounds 在留白过大等情况下会给出 NaN，用之前必须验一遍 */
+/** cameraForBounds can return NaN (when the padding is too large, for
+ *  instance), so it must be checked before use */
 function usableCamera(cam: { center?: unknown; zoom?: number } | null | undefined) {
   if (!cam || typeof cam.zoom !== "number" || !Number.isFinite(cam.zoom)) {
     return false;
@@ -174,8 +198,8 @@ export default function MarketMap({
   const [ready, setReady] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
-  // rows 变化很频繁（拖时间轴），用 ref 让事件回调永远读到最新的，
-  // 而不用把地图事件重新绑一遍
+  // rows changes very often (dragging the timeline). Refs let the event
+  // callbacks always read the latest values without rebinding the map events
   const rowsRef = useRef<Map<string, PanelRow>>(new Map());
   rowsRef.current = new Map(rows.map((r) => [r.area_code, r]));
   const metricRef = useRef(metric);
@@ -183,16 +207,18 @@ export default function MarketMap({
   const levelRef = useRef(level);
   levelRef.current = level;
 
-  /* ---------------- 初始化 ---------------- */
+  /* ---------------- Initialisation ---------------- */
   useEffect(() => {
     if (!holder.current || map.current) return;
 
     const m = new maplibregl.Map({
       container: holder.current,
-      // 故意不放 background 图层：canvas 保持透明，露出 .mapwrap 的 CSS 背景，
-      // 那个背景是 var(--water)，切主题时和整页一起变，不存在时序问题。
-      // 用 background 图层的话，它的颜色要靠 setPaintProperty 去追主题，
-      // 而 setPaintProperty 在样式没加载完时会抛错，第一帧就可能刷错颜色。
+      // Deliberately no background layer: the canvas stays transparent and
+      // shows the CSS background of .mapwrap, which is var(--water) and
+      // changes with the rest of the page on a theme switch, so there is no
+      // timing problem. A background layer would need setPaintProperty to
+      // chase the theme, and setPaintProperty throws while the style is
+      // still loading, so the very first frame could paint the wrong colour.
       style: { version: 8, sources: {}, layers: [] },
       bounds: DK_BOUNDS,
       fitBoundsOptions: { padding: FIT_PADDING },
@@ -219,8 +245,9 @@ export default function MarketMap({
     );
 
     m.on("load", async () => {
-      // "数据不足"的斜线纹理。灰色是一等公民，但要让人一眼看出
-      // 它和"零变化"的中性色不是一回事，所以给它一层纹理。
+      // Hatch texture for "insufficient data". Grey is a first-class citizen,
+      // but it has to be obvious at a glance that it is not the neutral
+      // colour for "no change", hence the texture on top.
       m.addImage("hatch", makeHatch(palette(theme).grayLine), { pixelRatio: 2 });
 
       const geo = await fetch(geoUrl(levelRef.current)).then((r) => r.json());
@@ -228,7 +255,7 @@ export default function MarketMap({
       m.addSource("kom", {
         type: "geojson",
         data: geo,
-        promoteId: "code", // feature-state 要按 code 寻址
+        promoteId: "code", // feature-state is addressed by code
       });
       loadedLevel.current = levelRef.current;
 
@@ -246,9 +273,10 @@ export default function MarketMap({
         },
       });
 
-      // 数据不足的单元额外盖一层斜线。
-      // 注意：feature-state 不能用在 layer 的 filter 里（MapLibre 会直接报错），
-      // 所以这三层"按状态显示"的效果都走 paint 表达式，用 opacity 开关。
+      // Units with insufficient data get an extra hatch layer on top.
+      // Note: feature-state cannot be used in a layer filter (MapLibre
+      // throws), so all three "show by state" effects go through paint
+      // expressions, switched with opacity.
       m.addLayer({
         id: "kom-hatch",
         type: "fill",
@@ -312,9 +340,10 @@ export default function MarketMap({
 
     m.on("error", (e) => console.error("[maplibre]", e?.error ?? e));
 
-    // 容器尺寸变了（窗口缩放、手机横竖屏切换）就重新 fit 一次。
-    // 但只在用户还没自己平移缩放过的时候做 —— 已经放大到某个 kommune 的人
-    // 不会希望转个屏幕就被拉回全国视图。
+    // When the container resizes (window resize, phone rotation), fit again.
+    // But only while the user has not panned or zoomed: someone already
+    // zoomed in on a kommune does not want to be pulled back to the national
+    // view just for rotating the screen.
     let userMoved = false;
     m.on("movestart", (e) => {
       if ((e as { originalEvent?: unknown }).originalEvent) userMoved = true;
@@ -340,12 +369,15 @@ export default function MarketMap({
     };
   }, []);
 
-  /* ---------------- 换行政层级 ---------------- */
-  // 只换 source 的数据，不重建图层。三层用的是同一批 paint 表达式，
-  // 因为数据都来自同一张面板，区别只是 OMR20 的位数。
-  // 记的是"source 里现在装的是哪一层"，不是"初始是哪一层"。
-  // 用后者的话，从 kommune 切到 landsdel 再切回来，会因为等于初始值而被跳过，
-  // source 里就一直留着 landsdel 的几何，配着 kommune 的数据 —— 全图变灰。
+  /* ---------------- Switching administrative level ---------------- */
+  // Only the source data is swapped; layers are not rebuilt. All levels use
+  // the same paint expressions, because the data all comes from the same
+  // panel and the only difference is the number of digits in OMR20.
+  // What is tracked is "which level the source holds now", not "which level
+  // it started with". With the latter, switching from kommune to landsdel
+  // and back would be skipped for equalling the initial value, leaving
+  // landsdel geometry in the source paired with kommune data: an all-grey
+  // map.
   const loadedLevel = useRef<GeoLevel | null>(null);
   useEffect(() => {
     const m = map.current;
@@ -367,9 +399,10 @@ export default function MarketMap({
     };
   }, [level, ready]);
 
-  /* ---------------- 换主题 ---------------- */
-  // 底色和三条描边不是 feature-state，改主题要显式重设一遍。
-  // 填充色由下面的涂色 effect 负责（它依赖 theme）。
+  /* ---------------- Switching theme ---------------- */
+  // The base colour and the three outlines are not feature-state, so a theme
+  // change has to reset them explicitly.
+  // Fill colours are handled by the colouring effect below (it depends on theme).
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
@@ -382,13 +415,13 @@ export default function MarketMap({
       if (m.hasImage("hatch")) m.removeImage("hatch");
       m.addImage("hatch", makeHatch(pal.grayLine), { pixelRatio: 2 });
     };
-    // setPaintProperty 在样式还没加载完时会抛 "Style is not done loading"，
-    // 所以没就绪就等一次 idle 再改
+    // setPaintProperty throws "Style is not done loading" while the style is
+    // still loading, so if it is not ready, wait for one idle and then apply
     if (m.isStyleLoaded()) apply();
     else m.once("idle", apply);
   }, [theme, ready]);
 
-  /* ---------------- 交互 ---------------- */
+  /* ---------------- Interaction ---------------- */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
@@ -446,7 +479,7 @@ export default function MarketMap({
     };
   }, [ready, onSelect]);
 
-  /* ---------------- 涂色 ---------------- */
+  /* ---------------- Colouring ---------------- */
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
@@ -457,8 +490,9 @@ export default function MarketMap({
 
     for (const r of rows) {
       const raw = r[metric.column] as number | null;
-      // insufficient 永远不上色，哪怕这一列碰巧有值。
-      // 这是 PRD §5 的硬规则：不显示我们自己都不信的数字。
+      // insufficient is never coloured, even if this column happens to hold
+      // a value. This is the hard rule from PRD §5: do not show numbers we
+      // do not trust ourselves.
       const usable = r.reliability !== "insufficient" ? raw : null;
       const color = colorFor(metric, usable, domain, theme);
       m.setFeatureState(
@@ -468,7 +502,8 @@ export default function MarketMap({
       seen.add(r.area_code);
     }
 
-    // 这一季完全没出现在面板里的 kommune 也要灰掉，否则会留着上一季的颜色
+    // A kommune entirely absent from the panel this quarter must go grey
+    // too, or it keeps last quarter's colour
     for (const code of areaNames.keys()) {
       if (!seen.has(code)) {
         m.setFeatureState(
@@ -479,7 +514,7 @@ export default function MarketMap({
     }
   }, [rows, metric, domains, category, ready, areaNames, theme]);
 
-  /* ---------------- 选中态 + 聚焦 ---------------- */
+  /* ---------------- Selected state + focus ---------------- */
   const prevSel = useRef<string | null>(null);
   useEffect(() => {
     const m = map.current;
@@ -494,26 +529,32 @@ export default function MarketMap({
       m.setFeatureState({ source: "kom", id: selected }, { selected: true });
     }
 
-    // 从侧栏点一个区域名，光描个边框是不够的 —— 98 个 kommune 里
-    // 认出被高亮的那个本身就很费劲。所以镜头跟过去。
+    // When an area name is clicked in the sidebar, an outline alone is not
+    // enough: spotting the highlighted one among 98 kommuner is hard work in
+    // itself. So the camera follows.
     if (selected) {
       const b = bboxes.current.get(selected);
       if (b) {
         const cam = m.cameraForBounds(b, { padding: focusPadding(m) });
         if (usableCamera(cam)) {
-          // 上下限都要卡：不卡下限的话，选一个很大的 landsdel 镜头几乎不动，
-          // 看着像没反应；不卡上限的话，选 Frederiksberg 会一头扎到街道级别。
+          // Clamp both ends: without the lower bound, picking a very large
+          // landsdel barely moves the camera and looks like no response;
+          // without the upper bound, picking Frederiksberg dives to street
+          // level.
           const base = m.getZoom();
           const z = Math.min(
-            MAX_FOCUS_ZOOM,
+            levelRef.current === "postnr"
+              ? MAX_FOCUS_ZOOM_POSTNR
+              : MAX_FOCUS_ZOOM,
             Math.max(cam!.zoom ?? base, base + MIN_FOCUS_STEP),
           );
           m.easeTo({ center: cam!.center, zoom: z, duration: 600 });
         }
       }
     } else if (prevSel.current) {
-      // 只在"刚刚取消选中"时退回全国视图。挂载时 selected 本来就是 null，
-      // 那时候不该动镜头（初始 fitBounds 已经做过了）。
+      // Return to the national view only when a selection was "just
+      // cleared". At mount selected is null anyway, and the camera should
+      // not move then (the initial fitBounds has already run).
       const home = m.cameraForBounds(DK_BOUNDS, { padding: FIT_PADDING });
       if (usableCamera(home)) m.easeTo({ ...home!, duration: 500 });
     }
@@ -536,16 +577,18 @@ export default function MarketMap({
         aria-live="polite"
       >
         <div className="tip__n">{hover.name}</div>
-        {/* 邮编是丹麦人认地方的方式 —— 说 "2100" 比说 "Østerbro 那一带" 更快。
-            列前四个，多的折起来。 */}
-        {(postnrByKommune[hover.code]?.length ?? 0) > 0 && (
-          <div className="tip__sub num">
-            {postnrByKommune[hover.code].slice(0, 4).join(" · ")}
-            {postnrByKommune[hover.code].length > 4
-              ? ` +${postnrByKommune[hover.code].length - 4}`
-              : ""}
-          </div>
-        )}
+        {/* Postal codes are how Danes identify places: saying "2100" is
+            quicker than saying "around Østerbro". List the first four and
+            fold the rest. */}
+        {levelRef.current === "kommune" &&
+          (postnrByKommune[hover.code]?.length ?? 0) > 0 && (
+            <div className="tip__sub num">
+              {postnrByKommune[hover.code].slice(0, 4).join(" · ")}
+              {postnrByKommune[hover.code].length > 4
+                ? ` +${postnrByKommune[hover.code].length - 4}`
+                : ""}
+            </div>
+          )}
         <div className="tip__r">
           <span>{mt.short}</span>
           <b className="num">
@@ -581,7 +624,7 @@ export default function MarketMap({
       <div
         ref={holder}
         style={{ position: "absolute", inset: 0 }}
-        aria-label={`Map of Denmark showing ${metric.label} by kommune for ${quarter}`}
+        aria-label={`Map of Denmark showing ${metric.label} by ${level} for ${quarter}`}
         role="img"
       />
       {tip()}
@@ -589,7 +632,7 @@ export default function MarketMap({
   );
 }
 
-/** 45° 斜线纹理，给"数据不足"的区域用。 */
+/** 45° hatch texture for "insufficient data" areas. */
 function makeHatch(stroke: string): ImageData {
   const s = 8;
   const c = document.createElement("canvas");

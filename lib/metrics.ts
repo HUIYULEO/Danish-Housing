@@ -1,12 +1,16 @@
 /**
- * 指标定义、配色和格式化。
+ * Metric definitions, colours and formatting.
  *
- * 这个文件是"地图上的颜色到底是什么意思"的唯一出处。
- * 三条规则写死在这里，别在组件里绕过去：
- *   1. reliability = insufficient 的单元永远不上色，画中性灰 + 斜线。
- *   2. 值域是全局固定的（ETL 算好放在 snapshot.json 里），不随季度重算。
- *      否则拖时间轴只能看到排名变化，看不到 2009 年崩盘和 2021 年狂热的区别。
- *   3. 所有增长率都读滚动 4 季度的列（price_4q / yoy_pct），不读单季度。
+ * This file is the single source for "what does a colour on the map mean".
+ * Three rules are hard-coded here; do not work around them in components:
+ *   1. Units with reliability = insufficient are never coloured; they get
+ *      neutral grey + hatching.
+ *   2. Domains are globally fixed (computed by the ETL into snapshot.json),
+ *      not recomputed per quarter. Otherwise the timeline would show only
+ *      ranking changes, not the difference between the 2009 crash and the
+ *      2021 frenzy.
+ *   3. Every growth rate reads the rolling 4-quarter columns
+ *      (price_4q / yoy_pct), never a single quarter.
  */
 
 export type Category = "house" | "flat" | "holiday";
@@ -18,7 +22,8 @@ export type MetricId =
   | "volume"
   | "supply"
   | "gap"
-  // 月度（UDB010/020/030），只有挂牌侧
+  | "afford"
+  // Monthly (UDB010/020/030), listing side only
   | "stock"
   | "asking"
   | "listed";
@@ -37,10 +42,17 @@ export interface PanelRow {
   quarters_of_supply: number | null;
   discount_pct: number | null;
   reliability: Reliability;
-  /** CPI 平减到最新季度克朗。名义/实际开关读这两列。 */
+  /** Affordability: years of a family's disposable income to buy 100 m². See afford in METRICS. */
+  years_income?: number | null;
+  years_income_chg?: number | null;
+  income_family?: number | null;
+  /** Which year's income was used. Income is published two years behind
+   *  prices, and the UI has to say so */
+  income_year?: number | null;
+  /** CPI-deflated to latest-quarter kroner. The nominal/real switch reads these two columns. */
   price_4q_real?: number | null;
   yoy_real_pct?: number | null;
-  /** 月度列（UDB010/020/030），只在月度模式下有值 */
+  /** Monthly columns (UDB010/020/030), only populated in monthly mode */
   for_sale?: number | null;
   asking_price_m2?: number | null;
   days_listed?: number | null;
@@ -67,7 +79,9 @@ export type DomainKey =
   | "dom_yoy_days"
   | "n_sold_4q"
   | "quarters_of_supply"
-  | "discount_pct";
+  | "discount_pct"
+  | "years_income"
+  | "years_income_chg";
 
 export type Domains = Record<string, Partial<Record<DomainKey, [number, number]>>>;
 
@@ -78,20 +92,23 @@ export interface Metric {
   column: DomainKey;
   kind: "sequential" | "diverging";
   /**
-   * 色阶在值域内怎么走。
+   * How the colour ramp runs across the domain.
    *
-   * 价格和成交量都是强右偏的比例量：最贵的 kommune 是最便宜的 8 倍，
-   * 线性铺开的话 98 个里有 70 个挤在最暗的两档里，地图看着像一整块。
-   * 取对数之后"两倍价差"在色阶上任何位置都是同样的距离，这才是
-   * 比例量该有的读法。去化季数偏得没那么狠，用 sqrt 就够。
+   * Price and volume are strongly right-skewed ratio quantities: the most
+   * expensive kommune is 8 times the cheapest, and laid out linearly 70 of
+   * the 98 crowd into the two darkest classes so the map reads as one block.
+   * On a log scale "twice the price" is the same distance anywhere on the
+   * ramp, which is how a ratio quantity should read. Quarters of supply is
+   * less skewed, so sqrt is enough.
    */
   scale?: "linear" | "log" | "sqrt";
-  /** true = 值越大颜色越"热"。挂牌天数和去化季数要反过来：天数越少市场越热。 */
+  /** true = the larger the value, the "hotter" the colour. Days on market and
+   *  quarters of supply run the other way: fewer days means a hotter market. */
   invert?: boolean;
   unit: string;
   blurb: string;
   format: (v: number) => string;
-  /** 图例两端和中点的刻度文本 */
+  /** Tick text for the two ends and the midpoint of the legend */
   tick: (v: number) => string;
 }
 
@@ -112,6 +129,9 @@ export const fmtDaysDelta = (v: number) =>
   `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(0).format(Math.abs(Math.round(v)))} d`;
 export const fmtInt = (v: number) => nf(0).format(Math.round(v));
 export const fmtQ = (v: number) => `${nf(1).format(v)}Q`;
+export const fmtYears = (v: number) => `${nf(1).format(v)} years`;
+export const fmtYearsDelta = (v: number) =>
+  `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(1).format(Math.abs(v))} yr`;
 
 export const METRICS: Metric[] = [
   {
@@ -178,6 +198,21 @@ export const METRICS: Metric[] = [
     tick: (v) => `${nf(1).format(v)}Q`,
   },
   {
+    id: "afford",
+    label: "Years of income",
+    short: "Years of income",
+    column: "years_income",
+    kind: "sequential",
+    scale: "log",
+    unit: "years",
+    blurb:
+      "Years of a family's disposable income to buy 100 m² at local prices. " +
+      "Both halves are same-year kroner, so this needs no inflation adjustment — " +
+      "it is the one measure here the nominal/real switch cannot change.",
+    format: fmtYears,
+    tick: (v) => `${nf(1).format(v)}y`,
+  },
+  {
     id: "gap",
     label: "Asking vs realised",
     short: "Gap",
@@ -193,14 +228,16 @@ export const METRICS: Metric[] = [
 ];
 
 /**
- * 月度指标。UDB010/020/030。
+ * Monthly metrics. UDB010/020/030.
  *
- * 只有三个，而且全是**挂牌侧**的量：在售套数、要价、已挂天数。
- * 免费数据里没有月度成交价，所以月度模式下没有 "Price" 和 "Growth" ——
- * 不是漏了，是那两个指标在月度上根本不存在。菜单里不列出来，
- * 比列出来再灰掉更诚实。
+ * Only three, all **listing-side**: homes for sale, asking price, days
+ * listed. The free data has no monthly sale prices, so monthly mode has no
+ * "Price" or "Growth". They are not missing; those two metrics simply do not
+ * exist at monthly frequency. Leaving them off the menu is more honest than
+ * listing them greyed out.
  *
- * 好处是它比季度数据新四个月，而且挂牌先动、成交后动。
+ * The upside is that it is four months fresher than the quarterly data, and
+ * listings move first while sales follow.
  */
 export const MONTHLY_METRICS: Metric[] = [
   {
@@ -248,18 +285,24 @@ export const METRIC_BY_ID = Object.fromEntries(
   [...METRICS, ...MONTHLY_METRICS].map((m) => [m.id, m]),
 ) as Record<MetricId, Metric>;
 
-export const metricsFor = (freq: Frequency) =>
-  freq === "month" ? MONTHLY_METRICS : METRICS;
+export const metricsFor = (freq: Frequency, level?: string) => {
+  if (freq === "month") return MONTHLY_METRICS;
+  if (level === "postnr") return METRICS.filter((m) => !NO_POSTNR.includes(m.id));
+  return METRICS;
+};
 
 /**
- * 名义 / 实际。
+ * Nominal / real.
  *
- * 时间轴一路拉到 1992 年，那年全国房价 4,121 kr/m²，今天 13,672。
- * 名义值看着是涨了 232%，但其中一大半只是钱变毛了 —— 同期 CPI 也涨了一倍多。
- * 实际价格用 DST 的 PRIS113 平减到最新季度的克朗，所以读作
- * "换算成今天的钱是多少"。
+ * The timeline runs all the way back to 1992, when the national price was
+ * 4,121 kr/m²; today it is 13,672. Nominally that is a 232% rise, but more
+ * than half of it is just money losing value: the CPI more than doubled over
+ * the same period.
+ * Real prices are deflated to latest-quarter kroner with DST's PRIS113, so
+ * they read as "what that is in today's money".
  *
- * 只有价格和价格增长有名义/实际之分。天数、笔数、去化季数本来就不是钱。
+ * Only price and price growth have a nominal/real distinction. Days, counts
+ * and quarters of supply are not money to begin with.
  */
 export function resolveMetric(metric: Metric, real: boolean): Metric {
   if (!real) return metric;
@@ -286,12 +329,13 @@ export function resolveMetric(metric: Metric, real: boolean): Metric {
   return metric;
 }
 
-/** 这个指标有没有实际口径。没有的话切换开关对它不起作用。 */
+/** Whether this metric has a real variant. If not, the switch has no effect on it. */
 export const hasRealVariant = (id: MetricId) => id === "price" || id === "growth";
 
-/** 行政层级。三层的数字都来自 BM010/020/030 自己的行，不是我们聚合的。 */
+/** Administrative levels. The numbers for all three come from
+ *  BM010/020/030's own rows, not from our aggregation. */
 export const GEO_LEVELS: {
-  id: "landsdel" | "region" | "kommune";
+  id: "landsdel" | "region" | "kommune" | "postnr";
   label: string;
   note: string;
 }[] = [
@@ -302,7 +346,24 @@ export const GEO_LEVELS: {
   },
   { id: "region", label: "Regioner", note: "5 administrative regions" },
   { id: "kommune", label: "Kommuner", note: "98 municipalities" },
+  {
+    id: "postnr",
+    label: "Postnumre",
+    note: "605 postal districts — the finest level Finans Danmark publishes",
+  },
 ];
+
+/**
+ * Metrics the postal level does not have.
+ *
+ * Income statistics (INDKF132) only go down to kommune. Spreading a
+ * kommune's income over its postal codes would give a good-looking map, but
+ * a made-up one: a villa district and a block of flats in the same kommune
+ * would show the same affordability. This project publishes no modelled
+ * numbers at all, so the postal level simply does not list this metric
+ * rather than listing it greyed out.
+ */
+const NO_POSTNR: MetricId[] = ["afford"];
 
 export const CATEGORIES: { id: Category; label: string; note: string }[] = [
   { id: "house", label: "Houses", note: "Detached and terraced" },
@@ -311,32 +372,34 @@ export const CATEGORIES: { id: Category; label: string; note: string }[] = [
 ];
 
 /* ------------------------------------------------------------------ *
- * 配色
+ * Colours
  * ------------------------------------------------------------------ */
 
 export type Theme = "light" | "dark";
 
 /**
- * 两套配色，浅色深色各一套。不是把浅色的反过来用 ——
- * 浅底上"深 = 高"，暗底上"亮 = 高"，两边的语义方向是相反的。
+ * Two palettes, one for light and one for dark. Dark is not light reversed:
+ * on a light ground "darker = higher", on a dark ground "brighter = higher";
+ * the semantic direction is opposite on the two sides.
  *
- * 色相都收在北欧的暖调里：陶土、赭石、旧木头，发散色阶的另一端用
- * 苔绿偏青，避开纯蓝纯红那种警报灯的观感。
+ * Hues stay within warm Nordic tones: terracotta, ochre, old wood. The other
+ * end of the diverging ramp is a moss green leaning teal, avoiding the
+ * warning-light look of pure blue and pure red.
  */
 interface Palette {
-  /** 数据不足。中性 + 斜线纹理，绝不参与任何色阶。 */
+  /** Insufficient data. Neutral + hatch texture, never part of any ramp. */
   gray: string;
   grayLine: string;
-  /** 海。地图背景不能是空白 */
+  /** Sea. The map background must not be blank */
   water: string;
   coast: string;
-  /** 区域之间的分隔线 */
+  /** Dividing lines between areas */
   border: string;
   hover: string;
   select: string;
-  /** 单调色阶 */
+  /** Sequential ramp */
   seq: string[];
-  /** 发散色阶：青绿（跌）-> 接近纸的中性（不动）-> 陶土（涨） */
+  /** Diverging ramp: teal (falling) -> near-paper neutral (flat) -> terracotta (rising) */
   div: string[];
 }
 
@@ -349,7 +412,7 @@ const PALETTES: Record<Theme, Palette> = {
     border: "#f4efe6",
     hover: "#2a2621",
     select: "#a35a38",
-    // 亚麻 -> 赭石 -> 深褐。浅底上越深越高。
+    // Linen -> ochre -> dark brown. On a light ground, darker is higher.
     seq: ["#f2e8d6", "#e5cfa9", "#d3ad78", "#b9854f", "#95602f", "#653c18"],
     div: [
       "#1f5c58",
@@ -369,7 +432,7 @@ const PALETTES: Record<Theme, Palette> = {
     border: "#1a1714",
     hover: "#f0e9dd",
     select: "#d98a5f",
-    // 暗底上反过来：越亮越高
+    // Reversed on a dark ground: brighter is higher
     seq: ["#2b241c", "#4a3826", "#6d4f2e", "#956b38", "#c29352", "#e8c384"],
     div: [
       "#4fa39d",
@@ -385,7 +448,7 @@ const PALETTES: Record<Theme, Palette> = {
 
 export const palette = (theme: Theme) => PALETTES[theme];
 
-/** 兼容旧调用：默认浅色的灰 */
+/** For legacy callers: the light theme's grey by default */
 export const GRAY_DATA = PALETTES.light.gray;
 
 function hex2rgb(h: string): [number, number, number] {
@@ -399,7 +462,7 @@ function rgb2hex(r: number, g: number, b: number) {
   return `#${c(r)}${c(g)}${c(b)}`;
 }
 
-/** 在色阶数组里按 t∈[0,1] 线性插值。够用了，不值得为此拉一个 d3 进来。 */
+/** Linear interpolation across the stops for t∈[0,1]. Good enough; not worth pulling in d3 for. */
 function ramp(stops: string[], t: number) {
   const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
   const i = Math.min(stops.length - 2, Math.floor(x));
@@ -413,7 +476,8 @@ function ramp(stops: string[], t: number) {
   );
 }
 
-/** 正向变换：把原始值映射到 [0,1]。log 的下界夹到 1 以上，避免 0 和负数。 */
+/** Forward transform: map a raw value to [0,1]. The log lower bound is
+ *  clamped to stay positive, to avoid 0 and negatives. */
 function toUnit(metric: Metric, v: number, lo: number, hi: number): number {
   const s = metric.scale ?? "linear";
   if (s === "log") {
@@ -429,7 +493,7 @@ function toUnit(metric: Metric, v: number, lo: number, hi: number): number {
   return (v - lo) / (hi - lo || 1);
 }
 
-/** 反向变换：图例上 t 处对应的原始值，用来标中间那个刻度。 */
+/** Inverse transform: the raw value at position t on the legend, used to label the inner ticks. */
 export function unitToValue(
   metric: Metric,
   t: number,
@@ -451,21 +515,24 @@ export function unitToValue(
 }
 
 /* ------------------------------------------------------------------ *
- * 分档
+ * Classes
  *
- * 地图用**离散色块**而不是连续渐变。渐变好看，但看图的人没法把一块颜色
- * 还原成一个数 —— 只能读出"比旁边深一点"。分档之后每块颜色对应一个
- * 写在图例上的区间，可以直接读数。纽约联储那张房价地图就是这么做的
- * （PRD §12 把它列为参考方向）。
+ * The map uses **discrete colour classes**, not a continuous gradient. A
+ * gradient looks good, but a reader cannot turn a patch of colour back into
+ * a number, only "a bit darker than its neighbour". With classes every
+ * colour maps to a range printed on the legend and can be read off directly.
+ * The New York Fed's house price map works this way (PRD §12 lists it as a
+ * reference).
  * ------------------------------------------------------------------ */
 
 /**
- * 1 / 2 / 2.5 / 5 / 10 那一族"好看的数"。
+ * The "nice numbers" family: 1 / 2 / 2.5 / 5 / 10.
  *
- * 往**下**取，不往上取。往上取的话 ±26% 的值域会得到 10% 的步长、
- * 分界一直铺到 ±40%，而实际数据只落在 ±20% 以内 —— 结果 98 个 kommune
- * 挤在中间两档里，等于白分。往下取得到 5%，分界到 ±20%，
- * 外面两档是开区间，正好接住尾巴。
+ * Rounds **down**, not up. Rounding up would give a ±26% domain a 10% step
+ * and breaks out to ±40%, while the actual data sits within ±20%; 98
+ * kommuner would crowd into the two middle classes and the classing would
+ * achieve nothing. Rounding down gives 5% and breaks to ±20%, and the two
+ * outer classes are open-ended, which catches the tails.
  */
 function niceStep(raw: number): number {
   if (!Number.isFinite(raw) || raw <= 0) return 1;
@@ -476,18 +543,20 @@ function niceStep(raw: number): number {
 }
 
 export interface Bins {
-  /** 分界值，升序 */
+  /** Break values, ascending */
   breaks: number[];
-  /** breaks.length + 1 个颜色，第 i 个对应 breaks[i-1] 到 breaks[i] */
+  /** breaks.length + 1 colours; the i-th covers breaks[i-1] to breaks[i] */
   colors: string[];
 }
 
 /**
- * 给一个指标算出分档。
+ * Compute the classes for a metric.
  *
- * 发散型（增长率、议价空间）在 0 两侧对称分档，**0 必须正好是一个分界**，
- * 否则"涨一点"和"跌一点"会共用一块颜色，这在房价图上是不能接受的。
- * 单调型沿各自的变换（log / sqrt）等距分档，再把分界圆整成好看的数。
+ * Diverging metrics (growth, negotiation margin) are classed symmetrically
+ * around 0, and **0 must be exactly on a break**. Otherwise "up a little" and
+ * "down a little" would share a colour, which is unacceptable on a house
+ * price map. Sequential metrics are classed at equal steps along their own
+ * transform (log / sqrt), with the breaks then rounded to nice numbers.
  */
 export function binsFor(
   metric: Metric,
@@ -500,7 +569,7 @@ export function binsFor(
   const pal = PALETTES[theme];
 
   if (metric.kind === "diverging") {
-    // 每侧四档，0 居中。±26% 会得到 ±5 / ±10 / ±15 / ±20。
+    // Four classes per side, 0 in the middle. ±26% gives ±5 / ±10 / ±15 / ±20.
     const per = 4;
     const step = niceStep(Math.max(Math.abs(lo), Math.abs(hi)) / per);
     const breaks = Array.from({ length: per * 2 + 1 }, (_, i) => (i - per) * step);
@@ -527,7 +596,7 @@ export function binsFor(
   return { breaks, colors: metric.invert ? colors.slice().reverse() : colors };
 }
 
-/** 值落在哪一档 */
+/** Which class a value falls into */
 export function binIndex(breaks: number[], v: number): number {
   let i = 0;
   while (i < breaks.length && v >= breaks[i]) i++;
@@ -535,9 +604,10 @@ export function binIndex(breaks: number[], v: number): number {
 }
 
 /**
- * 一个单元最终画什么颜色。
- * 超出两端归进最外面那一档 —— Frederiksberg 的 88,000 kr/m² 是真实的
- * 离群值，让它把整条色阶拉平会毁掉其它 97 个 kommune 的可读性。
+ * The final colour of a unit.
+ * Values beyond either end go into the outermost class. Frederiksberg's
+ * 88,000 kr/m² is a genuine outlier, and letting it stretch the whole ramp
+ * would wreck the readability of the other 97 kommuner.
  */
 export function colorFor(
   metric: Metric,
@@ -552,7 +622,7 @@ export function colorFor(
   return bins.colors[binIndex(bins.breaks, value)] ?? pal.gray;
 }
 
-/** 涨跌染色用在排行榜数字上，和地图的发散色阶保持一致。 */
+/** Up/down colouring for the board numbers, consistent with the map's diverging ramp. */
 export function trendClass(v: number | null | undefined, invert = false) {
   if (v == null || !Number.isFinite(v)) return "";
   const positive = invert ? v < 0 : v > 0;
@@ -560,15 +630,17 @@ export function trendClass(v: number | null | undefined, invert = false) {
 }
 
 /* ------------------------------------------------------------------ *
- * 样本量
+ * Sample size
  * ------------------------------------------------------------------ */
 
 /**
- * 四档门槛。ETL 已经算好写进 reliability 列，这里只负责说人话。
+ * Four tiers. The ETL has already computed them into the reliability column;
+ * this part only puts them into words.
  *
- * unverified 是 PRD 三档之外多出来的一档：成交量数据 2004 年才开始，
- * 而价格从 1992 年就有。把那十二年划成 insufficient 等于宣称
- * "我们知道那里成交太少"，但我们只是没有那个数。区别很重要。
+ * unverified is the extra tier beyond the PRD's three: volume data only
+ * starts in 2004 while prices go back to 1992. Marking those twelve years
+ * insufficient would claim "we know too few homes sold there", when we
+ * simply lack the number. The difference matters.
  */
 export const RELIABILITY_NOTE: Record<Reliability, string | null> = {
   ok: null,
@@ -577,15 +649,16 @@ export const RELIABILITY_NOTE: Record<Reliability, string | null> = {
   insufficient: "Insufficient data",
 };
 
-/** 能不能上色。只有 insufficient 是灰的。 */
+/** Whether a unit can be coloured. Only insufficient is grey. */
 export const canColor = (r: Reliability) => r !== "insufficient";
 
-/** 能不能上排行榜。PRD §5：低样本单元直接排除，不是显示后加标注。
- *  样本量查不到的也一样排除 —— 排不了就是排不了。 */
+/** Whether a unit can appear on a board. PRD §5: low-sample units are
+ *  excluded outright, not shown with a caveat. Units whose sample size cannot
+ *  be checked are excluded the same way: what cannot be ranked is not ranked. */
 export const canRank = (r: Reliability) => r === "ok";
 
 /* ------------------------------------------------------------------ *
- * 季度工具
+ * Quarter helpers
  * ------------------------------------------------------------------ */
 
 export const quarterLabel = (q: string) => q.replace("Q", " Q");
@@ -602,7 +675,7 @@ export function monthLabel(m: string): string {
   return `${MONTH_NAMES[Number(mm) - 1] ?? mm} ${y}`;
 }
 
-/** "2026Q1" -> 8104，用来做大小比较和减法 */
+/** "2026Q1" -> 8104, for comparisons and subtraction */
 export function quarterIndex(q: string): number {
   const y = Number(q.slice(0, 4));
   const n = Number(q.slice(5));
@@ -614,7 +687,7 @@ export function shiftQuarter(q: string, by: number): string {
   return `${Math.floor(i / 4)}Q${(i % 4) + 1}`;
 }
 
-/** 时间窗按钮。PRD §6.1：没有月度价格数据，所以最短就是 1 个季度。 */
+/** Time-window buttons. PRD §6.1: there is no monthly price data, so the shortest window is 1 quarter. */
 export const WINDOWS = [
   { id: "1Q", quarters: 1, label: "1Q" },
   { id: "4Q", quarters: 4, label: "4Q" },

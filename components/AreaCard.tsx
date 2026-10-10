@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * 点选一个 kommune 之后压在地图左上角的卡片。
+ * The card laid over the top-left of the map once a kommune is picked.
  *
- * PRD §9 的一条要求在这里：数据不足的区域**也要有内容**，
- * 要诚实地写清楚为什么没数据（成交量太少），而不是显示一堆空图表。
+ * One requirement of PRD §9 lives here: areas with insufficient data **must
+ * have content too**, saying honestly why there is no data (too few sales)
+ * instead of showing a pile of empty charts.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { areaSeries } from "@/lib/queries";
+import { areaSeries, type GeoLevel } from "@/lib/queries";
 import { Eyebrow } from "./Controls";
 import {
   fmtDays,
@@ -17,6 +18,7 @@ import {
   fmtKrM2,
   fmtPct,
   fmtQ,
+  fmtYears,
   quarterLabel,
   trendClass,
   type Category,
@@ -33,6 +35,7 @@ export default function AreaCard({
   real,
   monthlyMode,
   postnrs,
+  level,
   dbReady,
   onClose,
 }: {
@@ -43,6 +46,7 @@ export default function AreaCard({
   real: boolean;
   monthlyMode: boolean;
   postnrs: string[];
+  level: GeoLevel;
   dbReady: boolean;
   onClose: () => void;
 }) {
@@ -52,13 +56,13 @@ export default function AreaCard({
     if (!dbReady || monthlyMode) return;
     let alive = true;
     setSeries(null);
-    areaSeries(row.area_code, category)
+    areaSeries(row.area_code, category, level)
       .then((s) => alive && setSeries(s))
       .catch((e) => console.error("[series]", e));
     return () => {
       alive = false;
     };
-  }, [row.area_code, category, dbReady, monthlyMode]);
+  }, [row.area_code, category, level, dbReady, monthlyMode]);
 
   const insufficient = row.reliability === "insufficient";
   const price = real ? (row.price_4q_real ?? null) : row.price_4q;
@@ -66,8 +70,9 @@ export default function AreaCard({
 
   return (
     <div className="card" style={{ minWidth: 272 }}>
-      {/* 时间口径必须跟着卡片走。没有这一行，点开一个 kommune 之后
-          整个画面就再也没有地方说明"这是哪个季度的数"。 */}
+      {/* The time basis has to travel with the card. Without this line, once
+          a kommune is opened nothing on screen says "which quarter these
+          numbers are from". */}
       <Eyebrow quarter={quarter} category={category} real={real} />
       <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
         <div className="card__t" style={{ flex: 1 }}>
@@ -106,8 +111,9 @@ export default function AreaCard({
           <div style={{ marginTop: 8, display: "grid", gap: 3 }}>
             {monthlyMode ? (
               <>
-                {/* 月度模式下季度那几列全是空的，显示它们只会得到一排横杠。
-                    换成这个月真正有的三个量。 */}
+                {/* In monthly mode the quarterly columns are all empty and
+                    showing them only gives a row of dashes. Show the three
+                    measures this month actually has. */}
                 <Stat
                   k="Homes for sale"
                   v={row.for_sale != null ? fmtInt(row.for_sale) : "—"}
@@ -132,7 +138,8 @@ export default function AreaCard({
               </>
             ) : (
               <>
-            {/* 名义/实际开关也要管这张卡片，否则地图和卡片会显示两个价格 */}
+            {/* The nominal/real switch has to govern this card too, or the
+                map and the card show two prices */}
             <Stat
               k={real ? "Price, today's kroner" : "Price"}
               v={price != null ? fmtKrM2(price) : "—"}
@@ -162,13 +169,24 @@ export default function AreaCard({
               k="Asking vs realised"
               v={row.discount_pct != null ? fmtPct(row.discount_pct) : "—"}
             />
+            {/* Income is annual and two years behind prices, so the year goes
+                right on the label rather than in a tooltip. The postal level
+                has no such column and the whole row is absent. */}
+            {row.years_income != null && (
+              <Stat
+                k={`Years of income${
+                  row.income_year != null ? ` · ${row.income_year}` : ""
+                }`}
+                v={fmtYears(row.years_income)}
+              />
+            )}
               </>
             )}
           </div>
 
           {postnrs.length > 0 && (
             <div className="tip__r" style={{ alignItems: "flex-start" }}>
-              <span>Postal codes</span>
+              <span>Postal districts</span>
               <b
                 className="num"
                 style={{ textAlign: "right", fontWeight: 500, maxWidth: 168 }}
@@ -190,7 +208,14 @@ export default function AreaCard({
         </>
       )}
 
-      <Link className="card__more" href={`/area/${row.area_code}`}>
+      <Link
+        className="card__more"
+        href={
+          level === "postnr"
+            ? `/area/postnr/${row.area_code}`
+            : `/area/${row.area_code}`
+        }
+      >
         Full history for {name} →
       </Link>
     </div>
@@ -210,8 +235,9 @@ const label = (c: Category) =>
   c === "house" ? "houses" : c === "flat" ? "flats" : "holiday homes";
 
 /**
- * 价格走势 sparkline。只画滚动 4 季度均价，和地图用的是同一列，
- * 免得卡片上的线和地图上的颜色讲两个故事。
+ * Price trend sparkline. Draws only the rolling 4-quarter mean price, the
+ * same column the map uses, so the line on the card and the colour on the
+ * map do not tell two stories.
  */
 function Spark({
   series,
@@ -236,7 +262,8 @@ function Spark({
     return <div className="skeleton" style={{ marginTop: 12, height: 38 }} />;
   }
 
-  // 和地图读同一列，免得卡片上的线和地图上的颜色讲两个故事
+  // Reads the same column as the map, so the card's line and the map's
+  // colour do not tell two stories
   const val = (p: Point) => (real ? (p.price_4q_real ?? null) : p.price_4q);
   const pts = series.filter((p) => {
     const v = val(p);

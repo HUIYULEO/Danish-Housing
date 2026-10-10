@@ -1,31 +1,44 @@
 /**
- * 参数化查询模板。
+ * Parameterised query templates.
  *
- * PRD §10 说 NLQ 阶段不放开自由 SQL，只让 LLM 填一组固定模板的参数。
- * 那组模板就是这个文件 —— UI 现在用的和以后 LLM 用的是同一批函数，
- * 所以"AI 只能看到查询返回的数字"这件事是架构保证的，不是 prompt 保证的。
+ * PRD §10 says the NLQ stage does not open up free-form SQL; an LLM only
+ * fills in parameters for a fixed set of templates. This file is that set.
+ * The UI today and the LLM later use the same functions, so "the AI only sees
+ * numbers returned by queries" is guaranteed by the architecture, not by a
+ * prompt.
  *
- * 所有函数都只从 reliability 列过滤，不自己重算门槛。
+ * Every function filters on the reliability column only and never recomputes
+ * the thresholds itself.
  */
 
 import { query, lit } from "./db";
 import type { Category, PanelRow } from "./metrics";
 
-/** 行政层级。三层的数字来自同一张 kommune 面板 —— BM010/020/030 的 OMR20
- *  本来就含 region（081-085）和 landsdel（01-11）的行，不是我们自己聚合的。 */
-export type GeoLevel = "landsdel" | "region" | "kommune";
+/** Administrative levels.
+ *
+ * The first three levels read from the same kommune panel: the OMR20
+ * dimension of BM010/020/030 already contains rows for region (081-085) and
+ * landsdel (01-11); we do not aggregate them ourselves.
+ * postnr is the fourth level, with its own panel (BM011/BM021/BM031), again
+ * officially published rows. lib/db.ts reshapes both panels to the same
+ * columns, so the templates below need no fork per level. */
+export type GeoLevel = "landsdel" | "region" | "kommune" | "postnr";
 
-/** 面板里所有要往界面上送的列，两级共用。 */
+/** Which table holds the numbers for this level. */
+const src = (level: GeoLevel) => (level === "postnr" ? "postnr" : "kommune");
+
+/** Every panel column sent to the UI, shared by all levels. */
 const COLS = `price_4q, price_4q_real, yoy_pct, yoy_real_pct,
               accel_pp, dom_4q, dom_yoy_days,
               n_sold, n_sold_4q, n_for_sale, quarters_of_supply,
-              discount_pct, reliability`;
+              discount_pct, reliability,
+              years_income, years_income_chg, income_family, income_year`;
 
 export interface MoverRow extends PanelRow {
   name?: string;
 }
 
-/** 某个季度、某个房产类型的全部 kommune 切片。地图涂色用这一条。 */
+/** The full slice for one quarter and one property type. The map colouring uses this. */
 export function mapSlice(
   quarter: string,
   category: Category,
@@ -33,7 +46,7 @@ export function mapSlice(
 ) {
   return query<PanelRow>(
     `SELECT area_code, category, ${COLS}
-     FROM kommune
+     FROM ${src(level)}
      WHERE area_level = ${lit(level)}
        AND quarter = ${lit(quarter)}
        AND category = ${lit(category)}`,
@@ -41,11 +54,12 @@ export function mapSlice(
 }
 
 /**
- * 月度切片。UDB010/020/030，只有挂牌侧的三个指标。
+ * Monthly slice. UDB010/020/030, with only the three listing-side metrics.
  *
- * 这是"季度是不是最小颗粒度"的答案：成交价是，挂牌数据不是。
- * 月度模式下不做样本量分级 —— 在售套数是个普查量，不是抽样，
- * 没有"样本太薄"这回事；缺就是缺。
+ * This answers "is quarterly the finest grain?": for sale prices yes, for
+ * listings no. Monthly mode has no sample-size tiers: homes for sale is a
+ * census count, not a sample, so there is no such thing as "too thin a
+ * sample"; missing simply means missing.
  */
 export function monthlySlice(
   month: string,
@@ -65,26 +79,32 @@ export function monthlySlice(
   );
 }
 
-/** 月度面板里有哪些月份可选 */
+/** The months available in the monthly panel */
 export function monthlyMonths() {
   return query<{ month: string }>(
     `SELECT DISTINCT month FROM monthly ORDER BY month`,
   );
 }
 
-/** 一个区域的完整时间序列，用于详情页的走势图。 */
-export function areaSeries(areaCode: string, category: Category) {
-  // area_code 唯一，三层都能用同一条
+/** The complete time series of one area, for the trend charts on the detail page. */
+export function areaSeries(
+  areaCode: string,
+  category: Category,
+  level: GeoLevel = "kommune",
+) {
+  // area_code is unique within its own panel. Postal codes need the level
+  // spelled out because they live in another table: "2100" cannot collide
+  // with a kommune code, but the two tables do not merge by themselves.
   return query<PanelRow & { quarter: string }>(
     `SELECT quarter, area_code, category, ${COLS}
-     FROM kommune
+     FROM ${src(level)}
      WHERE area_code = ${lit(areaCode)}
        AND category = ${lit(category)}
      ORDER BY quarter`,
   );
 }
 
-/** 全国基准线（OMR20 的 '00'）。详情页和首页顶条都要它。 */
+/** National baseline (OMR20 '00'). The detail page and the home page's top strip both need it. */
 export function nationalSeries(category: Category) {
   return query<PanelRow & { quarter: string }>(
     `SELECT quarter, area_code, category, ${COLS}
@@ -95,35 +115,27 @@ export function nationalSeries(category: Category) {
 }
 
 /**
- * ⚠️ 冻结中（frozen）—— 目前没有任何地方调用它。
+ * The adequately sampled postnumre under one kommune. Feeds the drill-down
+ * table on the detail page.
  *
- * kommune 下面样本量够的 postnummer，用于详情页的下钻列表。
- *
- * 冻结的原因：邮编下钻界面没做，而 panel_postnr.parquet 有 4.1 MB。
- * 与其发一份没人查的数据，不如先不注册那个视图。
- * ETL 照常产出 data/panel_postnr.parquet，覆盖率也照常进 REPORT.md，
- * 只是不进 public/data、不注册成 DuckDB 视图。
- *
- * 解冻要做三件事：
- *   1. dk_housing_etl.py 的 export_web() 把 "postnr" 加回导出列表
- *   2. lib/db.ts 的 registerFileURL 循环把 "postnr" 加回去
- *   3. 界面上接下钻入口（AreaCard / Area Detail 已经有邮编号可用）
- *
- * 注意：这里用的是 postnummer 面板自己的数字，crosswalk 只负责
- * "哪些邮编属于这个 kommune"。22.6% 的邮编跨多个 kommune，
- * 所以那是一份展示用的归属，不是加总用的权重。
+ * The numbers are the postnummer panel's **own** rows (BM011/BM021/BM031,
+ * officially published); the crosswalk only answers "which postal codes fall
+ * in this kommune". 22.6% of postal codes span several kommuner, so that is
+ * membership for display, not a weight for summing. Adding up postal codes
+ * to get a kommune's numbers would give a kommune enclosed by its
+ * neighbours, like Frederiksberg, 6 sales a year.
  */
 export function postnrIn(codes: string[], quarter: string, category: Category) {
   if (!codes.length) return Promise.resolve([]);
   const list = codes.map(lit).join(",");
-  return query<PanelRow & { postnr: string }>(
-    `SELECT postnr, category, ${COLS}
+  return query<PanelRow>(
+    `SELECT area_code, category, ${COLS}
      FROM postnr
-     WHERE postnr IN (${list})
+     WHERE area_code IN (${list})
        AND quarter = ${lit(quarter)}
        AND category = ${lit(category)}
        AND reliability <> 'insufficient'
-     ORDER BY n_sold_4q DESC`,
+     ORDER BY n_sold_4q DESC NULLS LAST`,
   );
 }
 
@@ -133,16 +145,20 @@ export type BoardId =
   | "accelerating"
   | "cooling"
   | "heating"
-  | "stalling";
+  | "stalling"
+  | "stretching"
+  | "easing";
 
 export interface BoardSpec {
   id: BoardId;
   title: string;
   hint: string;
-  /** 卡片右侧显示哪一列 */
-  valueColumn: "yoy_pct" | "accel_pp" | "dom_yoy_days";
-  /** 数值染色时是否要反转（天数下降是好事） */
+  /** Which column the card shows on its right */
+  valueColumn: "yoy_pct" | "accel_pp" | "dom_yoy_days" | "years_income_chg";
+  /** Whether to invert the value colouring (falling days is good news) */
   invert?: boolean;
+  /** The postal level has no income data, so these two boards do not appear there */
+  kommuneOnly?: boolean;
 }
 
 export const BOARDS: BoardSpec[] = [
@@ -184,21 +200,42 @@ export const BOARDS: BoardSpec[] = [
     valueColumn: "dom_yoy_days",
     invert: true,
   },
+  {
+    id: "stretching",
+    title: "Stretching",
+    hint: "Prices pulling away from local incomes fastest",
+    valueColumn: "years_income_chg",
+    invert: true,
+    kommuneOnly: true,
+  },
+  {
+    id: "easing",
+    title: "Coming back in reach",
+    hint: "Local incomes gaining on prices fastest",
+    valueColumn: "years_income_chg",
+    invert: true,
+    kommuneOnly: true,
+  },
 ];
 
+/** Which boards this level can show. */
+export const boardsFor = (level: GeoLevel) =>
+  level === "postnr" ? BOARDS.filter((b) => !b.kommuneOnly) : BOARDS;
+
 /**
- * 排行榜。PRD §7 的定义逐条对应：
+ * The boards. One line per definition in PRD §7:
  *
- *   Fastest Rising    g(latest) 最大
- *   Fastest Falling   g(latest) 最小
- *   Accelerating      g(latest) - g(latest-4) 最大，且 g(latest) > 0
- *   Cooling           g(latest) - g(latest-4) 最小，且 g(latest) > 0
- *   Heating up        挂牌天数同比下降最多
- *   Stalling          挂牌天数同比上升最多
+ *   Fastest Rising    largest g(latest)
+ *   Fastest Falling   smallest g(latest)
+ *   Accelerating      largest g(latest) - g(latest-4), with g(latest) > 0
+ *   Cooling           smallest g(latest) - g(latest-4), with g(latest) > 0
+ *   Heating up        biggest year-on-year fall in days on market
+ *   Stalling          biggest year-on-year rise in days on market
  *
- * Cooling 那条 g > 0 的约束不能省，不然它会和 Fastest Falling 是同一批人。
- * 全部只取 reliability = 'ok'：榜单是"我们认为值得看的东西"，
- * 不该混进我们自己都不信的数字。
+ * The g > 0 constraint on Cooling cannot be dropped, or it would list the
+ * same areas as Fastest Falling.
+ * Everything uses reliability = 'ok' only: a board is "what we think is
+ * worth looking at" and should not mix in numbers we do not trust ourselves.
  */
 export function board(
   id: BoardId,
@@ -208,10 +245,10 @@ export function board(
   real = false,
   level: GeoLevel = "kommune",
 ) {
-  // 名义/实际要跟着地图走。地图标着 "real kroner" 而旁边榜单排的是名义涨幅，
-  // 那是两张表放在一起互相拆台。
+  // Nominal/real has to follow the map. A map labelled "real kroner" next to
+  // a board ranked on nominal growth is two tables contradicting each other.
   const yoy = real ? "yoy_real_pct" : "yoy_pct";
-  const base = `FROM kommune
+  const base = `FROM ${src(level)}
      WHERE area_level = ${lit(level)}
        AND quarter = ${lit(quarter)}
        AND category = ${lit(category)}
@@ -230,6 +267,17 @@ export function board(
     },
     heating: { where: "dom_yoy_days IS NOT NULL", order: "dom_yoy_days ASC" },
     stalling: { where: "dom_yoy_days IS NOT NULL", order: "dom_yoy_days DESC" },
+    // Affordability change is ranked in "years". These two boards only exist
+    // at levels with income data; at the postal level the query would come
+    // back empty, so boardsFor() removes them first.
+    stretching: {
+      where: "years_income_chg IS NOT NULL",
+      order: "years_income_chg DESC",
+    },
+    easing: {
+      where: "years_income_chg IS NOT NULL",
+      order: "years_income_chg ASC",
+    },
   };
 
   const s = spec[id];
@@ -241,7 +289,7 @@ export function board(
   );
 }
 
-/** 覆盖率统计，给 Data & Methods 页用真实数字而不是写死的文案。 */
+/** Coverage counts, so the Data & Methods page shows real numbers instead of hard-coded copy. */
 export function coverage(quarter: string, category: Category) {
   return query<{ reliability: string; n: number }>(
     `SELECT reliability, COUNT(*)::INT AS n
@@ -254,13 +302,17 @@ export function coverage(quarter: string, category: Category) {
 }
 
 /**
- * 任意时间窗的价格变化。
+ * Price change over an arbitrary time window.
  *
- * PRD §6.1 的时间切换是 1Q/4Q/3Y/5Y/10Y，但面板里预算好的只有 4Q 同比。
- * 其它窗口在这里现算：拿当前季度的滚动 4 季度均价，比 N 个季度之前的同一列。
+ * The time switch in PRD §6.1 is 1Q/4Q/3Y/5Y/10Y, but only the 4Q
+ * year-on-year is precomputed in the panel. Other windows are computed here:
+ * take the current quarter's rolling 4-quarter mean price and compare it with
+ * the same column N quarters earlier.
  *
- * 用 price_4q 而不是 price_m2_realised 是 PRD §5 的规则 ——
- * 增长率一律用滚动 4 季度均价算，不用单季度点对点，否则薄样本会把曲线打成锯齿。
+ * Using price_4q rather than price_m2_realised is the rule from PRD §5:
+ * growth rates always come from the rolling 4-quarter mean price, never
+ * single-quarter point to point, or thin samples turn the curve into a
+ * sawtooth.
  */
 export function growthSlice(
   quarter: string,
@@ -269,13 +321,14 @@ export function growthSlice(
   real = false,
   level: GeoLevel = "kommune",
 ) {
-  // 实际口径下起点和终点都要用平减过的列，否则算出来的是
-  // "名义终点比实际起点"，那不是任何一个有意义的数
+  // In real terms both the start and the end must use the deflated column,
+  // otherwise the result is "nominal end over real start", which is not a
+  // meaningful number of any kind
   const priceCol = real ? "price_4q_real" : "price_4q";
   return query<PanelRow>(
     `WITH s AS (
        SELECT area_code, quarter, ${COLS}
-       FROM kommune
+       FROM ${src(level)}
        WHERE area_level = ${lit(level)} AND category = ${lit(category)}
      ),
      cur AS (SELECT * FROM s WHERE quarter = ${lit(quarter)}),
@@ -289,14 +342,18 @@ export function growthSlice(
        cur.price_4q, cur.price_4q_real, cur.accel_pp, cur.dom_4q, cur.dom_yoy_days,
        cur.n_sold, cur.n_sold_4q, cur.n_for_sale,
        cur.quarters_of_supply, cur.discount_pct,
+       cur.years_income, cur.years_income_chg,
+       cur.income_family, cur.income_year,
        CASE WHEN prv.p0 > 0 AND prv.r0 <> 'insufficient'
             THEN (cur.${priceCol} / prv.p0 - 1) * 100 END
          AS ${real ? "yoy_real_pct" : "yoy_pct"},
        ${real ? "cur.yoy_pct" : "cur.yoy_real_pct"} AS
          ${real ? "yoy_pct" : "yoy_real_pct"},
-       -- 起点样本量确实不够的话，这个变化率也不可信，一并降级。
-       -- 但"2004 年以前没发布成交量"不算不够 —— 那会让 10Y 窗口
-       -- 在 2014 年之前的每一个季度都整片变灰，而起点价格是官方发布的。
+       -- If the sample at the start point really is too thin, the change
+       -- cannot be trusted either, so it is downgraded too.
+       -- But "volumes were not published before 2004" is not too thin: that
+       -- would turn every quarter before 2014 solid grey in the 10Y window,
+       -- while the start price is officially published.
        CASE
          WHEN prv.p0 IS NULL THEN 'insufficient'
          WHEN prv.r0 = 'insufficient' THEN 'insufficient'

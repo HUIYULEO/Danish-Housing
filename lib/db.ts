@@ -1,15 +1,19 @@
 /**
- * DuckDB WASM。整包 Parquet 进浏览器，没有后端。
+ * DuckDB WASM. All the Parquet goes to the browser; there is no backend.
  *
- * 两件事值得说明：
+ * Two things worth explaining:
  *
- * 1. wasm 和 worker 都自己托管（public/duckdb/，由 scripts/sync-duckdb.mjs 同步），
- *    不走 jsDelivr。CDN 挂了整个站就查不了数，而部署形态是一个静态站，
- *    没道理把可用性押在第三方 CDN 上。
+ * 1. The wasm and worker are self-hosted (public/duckdb/, synced by
+ *    scripts/sync-duckdb.mjs) rather than loaded from jsDelivr. If the CDN
+ *    went down the whole site could no longer query, and the deployment is a
+ *    static site; there is no reason to stake availability on a third-party
+ *    CDN.
  *
- * 2. **懒加载**。DuckDB 本体 gzip 后 7 MB，比它要查的 1.4 MB 数据还大 5 倍。
- *    首屏地图读 snapshot.json（67 KB）直接涂色，DuckDB 在后台加载，
- *    加载完时间轴和排行榜才解锁。首屏不等引擎。
+ * 2. **Lazy loading.** DuckDB itself is 7 MB gzipped, 5 times the 1.4 MB of
+ *    data it queries. The first-paint map reads snapshot.json (67 KB) and
+ *    colours straight away while DuckDB loads in the background; the timeline
+ *    and boards unlock once it is up. The first screen never waits for the
+ *    engine.
  */
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from "@duckdb/duckdb-wasm";
@@ -20,11 +24,33 @@ export type DbStatus = "idle" | "loading" | "ready" | "error";
 let dbPromise: Promise<AsyncDuckDBConnection> | null = null;
 let handle: { db: AsyncDuckDB; conn: AsyncDuckDBConnection } | null = null;
 
+/**
+ * The shape each of the three panels is registered in.
+ *
+ * The postal panel's key column is called postnr and it has no income data:
+ * INDKF132 only goes down to kommune. The columns are padded here to match
+ * the kommune panel so the templates in lib/queries.ts need no fork for the
+ * postal level; the four missing columns are real NULLs, not numbers we
+ * spread around.
+ */
+const VIEWS: Record<string, string> = {
+  kommune: `SELECT * FROM read_parquet('panel_kommune.parquet')`,
+  postnr: `SELECT postnr AS area_code,
+                  'postnr' AS area_level,
+                  NULL::DOUBLE AS years_income,
+                  NULL::DOUBLE AS years_income_chg,
+                  NULL::DOUBLE AS income_family,
+                  NULL::INTEGER AS income_year,
+                  * EXCLUDE (postnr)
+           FROM read_parquet('panel_postnr.parquet')`,
+  monthly: `SELECT * FROM read_parquet('panel_monthly.parquet')`,
+};
+
 async function boot(): Promise<AsyncDuckDBConnection> {
   const duckdb = await import("@duckdb/duckdb-wasm");
 
-  // 自托管 bundle。selectBundle 会探测浏览器支不支持 exception handling，
-  // 支持就用 eh（快一截），不支持退回 mvp。
+  // Self-hosted bundles. selectBundle probes whether the browser supports
+  // exception handling: eh if so (noticeably faster), mvp otherwise.
   const bundle = await duckdb.selectBundle({
     mvp: {
       mainModule: asset("/duckdb/duckdb-mvp.wasm"),
@@ -44,9 +70,10 @@ async function boot(): Promise<AsyncDuckDBConnection> {
 
   const conn = await db.connect();
 
-  // 数据版本号。Parquet 值得长缓存，但季度更新之后如果 URL 不变，
-  // 浏览器会拿着上一季的 Parquet 配这一季的 snapshot.json，
-  // 地图和时间轴就会讲两个不同的故事。所以 URL 带上内容哈希。
+  // Data version. The Parquet deserves a long cache, but if the URL stayed
+  // the same after a quarterly update, the browser would pair last quarter's
+  // Parquet with this quarter's snapshot.json and the map and timeline would
+  // tell two different stories. So the URL carries a content hash.
   const version = await fetch(asset("/data/version.json"), {
     cache: "no-store",
   })
@@ -55,34 +82,30 @@ async function boot(): Promise<AsyncDuckDBConnection> {
     .catch(() => "");
   const q = version ? `?v=${encodeURIComponent(version)}` : "";
 
-  // 面板注册成视图。Parquet 直接从 HTTP 读，DuckDB 按需拉 row group，
-  // 不需要先把整个文件塞进内存。
-  //
-  // postnr 面板**冻结**，不注册。它有 4.1 MB，而现在界面上没有任何地方查它 ——
-  // 下钻功能没做。挂在这里只会白白占仓库和托管的空间。
-  // 解冻要做的事都写在 lib/queries.ts 的 postnrIn() 上面。
-  for (const level of ["kommune", "monthly"]) {
+  // Register the panels as views. Parquet is read straight over HTTP and
+  // DuckDB pulls row groups on demand, so the whole file never has to sit in
+  // memory. The postal panel is 4 MB, but querying the dozen or so postal
+  // codes under one kommune touches only a few row groups (the ETL sorts by
+  // postal code).
+  for (const [level, body] of Object.entries(VIEWS)) {
     await db.registerFileURL(
       `panel_${level}.parquet`,
       `${assetUrl(`/data/panel_${level}.parquet`)}${q}`,
       duckdb.DuckDBDataProtocol.HTTP,
       false,
     );
-    await conn.query(
-      `CREATE OR REPLACE VIEW ${level} AS
-       SELECT * FROM read_parquet('panel_${level}.parquet')`,
-    );
+    await conn.query(`CREATE OR REPLACE VIEW ${level} AS ${body}`);
   }
 
   handle = { db, conn };
   return conn;
 }
 
-/** 幂等。多个组件同时叫也只会启动一次。 */
+/** Idempotent. Many components can call it at once and it still boots only once. */
 export function getConnection(): Promise<AsyncDuckDBConnection> {
   if (!dbPromise) {
     dbPromise = boot().catch((e) => {
-      dbPromise = null; // 失败了允许重试
+      dbPromise = null; // allow a retry after a failure
       throw e;
     });
   }
@@ -99,10 +122,11 @@ export async function closeConnection() {
 }
 
 /**
- * 查询并转成普通对象数组。
+ * Run a query and convert the result to an array of plain objects.
  *
- * Arrow 的行对象带一堆 proxy，直接塞进 React state 会很难受；
- * 而且 BigInt 不能 JSON 序列化。这里统一拍平成 plain object + number。
+ * Arrow row objects carry a pile of proxies and are awkward to put into
+ * React state, and BigInt cannot be JSON-serialised. Everything is flattened
+ * here into plain objects + numbers.
  */
 export async function query<T = Record<string, unknown>>(
   sql: string,
@@ -127,10 +151,11 @@ export async function query<T = Record<string, unknown>>(
 }
 
 /**
- * SQL 字面量转义。
+ * SQL literal escaping.
  *
- * PRD §10 的架构约束是 LLM 只能填参数、不能生成 SQL；这个函数保证
- * 就算参数是用户可控的，也拼不出第二条语句。
+ * The architectural constraint in PRD §10 is that an LLM may only fill in
+ * parameters, never generate SQL. This function guarantees that even a
+ * user-controlled parameter cannot be turned into a second statement.
  */
 export function lit(s: string): string {
   return `'${String(s).replace(/'/g, "''")}'`;

@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * 区域详情页。PRD §9。
+ * Area detail page. PRD §9.
  *
- * 数据全部在客户端向 DuckDB 要 —— 页面本身是静态导出的空壳，
- * 只带名字和层级。这样 114 个区域页不需要 114 份预生成的 JSON，
- * 用的还是首页那份已经加载好的 Parquet。
+ * All data is requested from DuckDB on the client. The page itself is a
+ * statically exported shell carrying only the name and level. That way 114
+ * area pages do not need 114 pre-generated JSON files; they use the same
+ * Parquet the home page has already loaded.
  *
- * PRD §9 明确要求的一条在最下面：**数据不足的区域也要有页面**，
- * 页面上诚实写清楚为什么没有数据，而不是 404 或者一堆空图表。
+ * One explicit requirement of PRD §9 is at the very bottom: **areas with
+ * insufficient data must have a page too**, one that says honestly why there
+ * is no data, rather than a 404 or a pile of empty charts.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,7 +20,12 @@ import Chart, { cssVar, plotBase } from "./Chart";
 import ThemeToggle, { useTheme } from "./ThemeToggle";
 import { RealToggle, CategoryPicker } from "./Controls";
 import { getConnection } from "@/lib/db";
-import { areaSeries, nationalSeries } from "@/lib/queries";
+import {
+  areaSeries,
+  nationalSeries,
+  postnrIn,
+  type GeoLevel,
+} from "@/lib/queries";
 import {
   CATEGORIES,
   fmtDays,
@@ -26,6 +33,7 @@ import {
   fmtKrM2,
   fmtPct,
   fmtQ,
+  fmtYears,
   quarterLabel,
   trendClass,
   RELIABILITY_NOTE,
@@ -37,8 +45,9 @@ import {
 
 type Point = PanelRow & { quarter: string };
 
-/** 图表只画 2004 年以后 —— 成交量和挂牌天数从那年才有，
- *  再往前拉整条线会有一半是空的。价格的完整历史在首页时间轴上看。 */
+/** Charts only go back to 2004: volumes and days on market start that year,
+ *  and going further back would leave half of every line empty. The full
+ *  price history is on the home page timeline. */
 const FROM = "2004Q1";
 
 export default function AreaDetail({
@@ -47,14 +56,20 @@ export default function AreaDetail({
   level,
   latestQuarter,
   postnrs,
+  summary,
 }: {
   code: string;
   name: string;
   level: string;
   latestQuarter: string;
   domains: Domains;
+  /** Server-rendered headline numbers in words; in the HTML before DuckDB loads. */
+  summary?: React.ReactNode;
   postnrs: string[];
 }) {
+  // The postal page and the kommune page share this component, but the
+  // numbers sit in two different panels
+  const geo: GeoLevel = level === "postnr" ? "postnr" : "kommune";
   const [theme, themeChoice, setThemeChoice] = useTheme();
   const [category, setCategory] = useState<Category>("house");
   const [real, setReal] = useState(false);
@@ -63,15 +78,15 @@ export default function AreaDetail({
   const [available, setAvailable] = useState<Category[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 先把三个房产类型都拉一遍，看哪些真的有数据。
-  // PRD §9：没有数据的类型直接不显示，不显示空图表。
+  // First fetch all three property types to see which really have data.
+  // PRD §9: types without data are simply not shown; no empty charts.
   useEffect(() => {
     let alive = true;
     getConnection()
       .then(async () => {
         const found: Category[] = [];
         for (const c of CATEGORIES) {
-          const s = await areaSeries(code, c.id);
+          const s = await areaSeries(code, c.id, geo);
           if (s.some((r) => r.price_4q != null)) found.push(c.id);
         }
         if (!alive) return;
@@ -82,13 +97,13 @@ export default function AreaDetail({
     return () => {
       alive = false;
     };
-  }, [code]);
+  }, [code, geo]);
 
   useEffect(() => {
     if (!available) return;
     let alive = true;
     setSeries(null);
-    Promise.all([areaSeries(code, category), nationalSeries(category)])
+    Promise.all([areaSeries(code, category, geo), nationalSeries(category)])
       .then(([a, n]) => {
         if (!alive) return;
         setSeries(a.filter((r) => r.quarter >= FROM));
@@ -98,12 +113,32 @@ export default function AreaDetail({
     return () => {
       alive = false;
     };
-  }, [code, category, available]);
+  }, [code, category, available, geo]);
 
   const latest = useMemo(
     () => series?.find((r) => r.quarter === latestQuarter) ?? null,
     [series, latestQuarter],
   );
+
+  /* -------- Postal drill-down -------- *
+   *
+   * The numbers are the postnummer panel's own rows (BM011/BM021/BM031), not
+   * the kommune's numbers spread downwards. The crosswalk only answers
+   * "which postal codes fall in this kommune", and 23% of postal codes
+   * straddle a boundary, so it is membership, not a weight. That is what the
+   * note under the table says. */
+  const [drill, setDrill] = useState<PanelRow[] | null>(null);
+  useEffect(() => {
+    if (!available || !postnrs.length) return;
+    let alive = true;
+    setDrill(null);
+    postnrIn(postnrs, latestQuarter, category)
+      .then((r) => alive && setDrill(r))
+      .catch((e) => console.error("[drill]", e));
+    return () => {
+      alive = false;
+    };
+  }, [postnrs, latestQuarter, category, available]);
 
   const priceCol = real ? "price_4q_real" : "price_4q";
   const yoyCol = real ? "yoy_real_pct" : "yoy_pct";
@@ -115,6 +150,20 @@ export default function AreaDetail({
         .filter((r) => val(r, priceCol) != null)
         .map((r) => ({ q: qNum(r.quarter), v: val(r, priceCol) as number })),
     [series, priceCol],
+  );
+  const affordRows = useMemo(
+    () =>
+      (series ?? [])
+        .filter((r) => r.years_income != null)
+        .map((r) => ({ q: qNum(r.quarter), v: r.years_income as number })),
+    [series],
+  );
+  const affordNatRows = useMemo(
+    () =>
+      (national ?? [])
+        .filter((r) => r.years_income != null)
+        .map((r) => ({ q: qNum(r.quarter), v: r.years_income as number })),
+    [national],
   );
   const natRows = useMemo(
     () =>
@@ -156,8 +205,10 @@ export default function AreaDetail({
         </p>
       )}
 
+      {!insufficient && summary}
+
       {insufficient ? (
-        // PRD §9：数据不足的区域也要有页面，并且写清楚为什么
+        // PRD §9: areas with insufficient data get a page too, and it says why
         <section className="detail__block">
           <p className="detail__prose">
             Finans Danmark publishes no price series for {name}. That is not a
@@ -212,6 +263,13 @@ export default function AreaDetail({
               v={latest ? fmtOrDash(latest.discount_pct, fmtPct) : "—"}
               sub="negative = sold under asking"
             />
+            {latest?.years_income != null && (
+              <Stat
+                k="Years of income"
+                v={fmtOrDash(latest.years_income, fmtYears)}
+                sub={`for 100 m², family income ${latest.income_year ?? ""}`}
+              />
+            )}
           </section>
 
           {loading ? (
@@ -255,6 +313,45 @@ export default function AreaDetail({
                   })}
                 />
               </section>
+
+              {affordRows.length > 8 && (
+                <section className="detail__block">
+                  <h2 className="detail__h2">
+                    Years of income to buy 100 m²
+                  </h2>
+                  <Chart
+                    height={180}
+                    deps={[affordRows, affordNatRows, theme]}
+                    caption={
+                      "Local price per m² × 100, divided by average disposable " +
+                      "family income in the same area and year. " +
+                      `${name} in colour, all of Denmark dashed. ` +
+                      "Both halves are same-year kroner, so inflation cancels " +
+                      "and the nominal/real switch does not apply here."
+                    }
+                    options={() => ({
+                      ...plotBase(760, 180),
+                      y: { label: null, grid: true, ticks: 4 },
+                      marks: [
+                        Plot.ruleY([0], { stroke: cssVar("--line") }),
+                        Plot.line(affordNatRows, {
+                          x: "q",
+                          y: "v",
+                          stroke: cssVar("--ink-3"),
+                          strokeWidth: 1.2,
+                          strokeDasharray: "3,3",
+                        }),
+                        Plot.line(affordRows, {
+                          x: "q",
+                          y: "v",
+                          stroke: cssVar("--neg"),
+                          strokeWidth: 2,
+                        }),
+                      ],
+                    })}
+                  />
+                </section>
+              )}
 
               <section className="detail__block detail__block--two">
                 <div>
@@ -308,14 +405,77 @@ export default function AreaDetail({
 
           {postnrs.length > 0 && (
             <section className="detail__block">
-              <h2 className="detail__h2">Postal codes in {name}</h2>
-              <p className="detail__codes num">{postnrs.join(" · ")}</p>
-              <p className="detail__note">
-                Postal-code level figures exist in the source data but are not
-                published on this site yet. Note that about 23% of Danish postal
-                codes straddle a kommune boundary, so this is a display
-                grouping, not a way to add numbers up.
-              </p>
+              <h2 className="detail__h2">Inside {name}</h2>
+              {drill === null ? (
+                <span className="loading">
+                  <span className="loading__dot" />
+                  Loading postal districts…
+                </span>
+              ) : drill.length === 0 ? (
+                <p className="detail__note">
+                  None of the {postnrs.length} postal districts here had enough{" "}
+                  {category === "house"
+                    ? "house"
+                    : category === "flat"
+                      ? "flat"
+                      : "holiday-home"}{" "}
+                  sales in the four quarters to {quarterLabel(latestQuarter)} to
+                  report a price. The kommune total above is still published —
+                  it pools all of them.
+                </p>
+              ) : (
+                <div className="drill">
+                  <table className="drill__t">
+                    <thead>
+                      <tr>
+                        <th scope="col">Postal district</th>
+                        <th scope="col">Price</th>
+                        <th scope="col">Year on year</th>
+                        <th scope="col">Days</th>
+                        <th scope="col">Sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drill.map((r) => (
+                        <tr key={r.area_code} data-low={r.reliability === "low"}>
+                          <th scope="row">
+                            <Link href={`/area/postnr/${r.area_code}`}>
+                              <span className="num">{r.area_code}</span>
+                            </Link>
+                          </th>
+                          <td className="num">
+                            {fmtOrDash(r.price_4q, fmtKrM2)}
+                          </td>
+                          <td className={`num ${trendClass(r.yoy_pct)}`}>
+                            {fmtOrDash(r.yoy_pct, fmtPct)}
+                          </td>
+                          <td className="num">{fmtOrDash(r.dom_4q, fmtDays)}</td>
+                          <td className="num">
+                            {fmtOrDash(r.n_sold_4q, fmtInt)}
+                            {r.reliability === "low" ? " ·" : ""}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="detail__note">
+                    Rows marked · have 10-39 sales in the trailing four
+                    quarters: shown, but kept off the rankings. Districts with
+                    fewer than 10 are left out entirely.
+                    {drill.length < postnrs.length && (
+                      <>
+                        {" "}
+                        {postnrs.length - drill.length} of {postnrs.length}{" "}
+                        districts here are below that bar this quarter.
+                      </>
+                    )}{" "}
+                    These are each district&apos;s own published figures, not
+                    the kommune total split up — and about 23% of Danish postal
+                    districts straddle a kommune boundary, so they will not add
+                    back up to it.
+                  </p>
+                </div>
+              )}
             </section>
           )}
         </>
@@ -353,7 +513,7 @@ const fmtOrDash = (
   f: (n: number) => string,
 ) => (v != null && Number.isFinite(v) ? f(v) : "—");
 
-/** "2012Q3" -> 2012.5，Plot 的 x 轴要连续数值 */
+/** "2012Q3" -> 2012.5; Plot's x axis needs continuous numbers */
 function qNum(q: string): number {
   return Number(q.slice(0, 4)) + (Number(q.slice(5)) - 1) / 4;
 }

@@ -48,17 +48,20 @@ export function MetricPicker({
   value,
   onChange,
   freq,
+  level,
 }: {
   value: MetricId;
   onChange: (v: MetricId) => void;
   freq: Frequency;
+  /** The postal level has no income data, so Years of income is not listed there */
+  level?: string;
 }) {
   return (
     <Segmented
       label="Measure"
       value={value}
       onChange={onChange}
-      options={metricsFor(freq).map((m) => ({
+      options={metricsFor(freq, level).map((m) => ({
         id: m.id,
         label: m.short,
         title: m.blurb,
@@ -74,7 +77,7 @@ export function CategoryPicker({
 }: {
   value: Category;
   onChange: (v: Category) => void;
-  /** 只显示这几个类型。PRD §9：没有数据的类型直接不显示，不显示空图表。 */
+  /** Show only these types. PRD §9: types without data are simply not shown; no empty charts. */
   only?: Category[];
 }) {
   const list = only ? CATEGORIES.filter((c) => only.includes(c.id)) : CATEGORIES;
@@ -93,11 +96,11 @@ export function CategoryPicker({
 }
 
 /**
- * 地图上的说明卡。
+ * The info card on the map.
  *
- * eyebrow 那一行是"我现在看的是什么时候、什么口径的数"，
- * 点开某个 kommune 之后 AreaCard 会接着显示同一行 —— 不能让画面上
- * 出现任何一个时刻，用户找不到当前季度。
+ * The eyebrow line is "what period and what basis am I looking at". Once a
+ * kommune is opened, AreaCard carries on showing the same line: there must
+ * never be a moment on screen when the user cannot find the current quarter.
  */
 export function Headline({
   metric,
@@ -107,6 +110,7 @@ export function Headline({
   colored,
   total,
   levelLabel,
+  incomeYear,
 }: {
   metric: Metric;
   category: Category;
@@ -115,6 +119,9 @@ export function Headline({
   colored: number;
   total: number;
   levelLabel: string;
+  /** The income year used for affordability. Income is published two years
+   *  behind prices, and that has to be stated up front. */
+  incomeYear?: number | null;
 }) {
   const cat = CATEGORIES.find((c) => c.id === category)!;
   const gray = total - colored;
@@ -133,12 +140,19 @@ export function Headline({
             number on.
           </>
         )}
+        {metric.id === "afford" && incomeYear != null && (
+          <>
+            {" "}
+            Prices are {quarter}; incomes are {incomeYear}, the latest year
+            Danmarks Statistik has published.
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-/** 季度 + 房产类型 + 名义/实际。地图上任何一张卡片都戴着它。 */
+/** Quarter + property type + nominal/real. Every card on the map carries it. */
 export function Eyebrow({
   quarter,
   category,
@@ -159,10 +173,11 @@ export function Eyebrow({
 }
 
 /**
- * 名义 / 实际克朗。
+ * Nominal / real kroner.
  *
- * 只对价格和增长率有意义，其它指标下这个开关会禁用而不是消失 ——
- * 消失会让人以为自己按错了地方。
+ * Only meaningful for price and growth. Under other metrics the switch is
+ * disabled rather than removed; if it vanished, people would think they had
+ * pressed the wrong thing.
  */
 export function RealToggle({
   value,

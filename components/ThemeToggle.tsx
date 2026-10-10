@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * 亮/暗切换。
+ * Light/dark switch.
  *
- * 三态而不是两态：Auto 跟随系统，Light / Dark 手动锁定。
- * 只给两个按钮的话，系统是暗色的人点一下"亮"，就再也回不到跟随系统了。
+ * Three states rather than two: Auto follows the system, Light / Dark lock
+ * it manually. With only two buttons, someone on a dark system who clicks
+ * "light" once could never get back to following the system.
  *
- * 选择存在 localStorage，读取和落 data-theme 由 layout 里的内联脚本完成 ——
- * 必须在首次绘制之前跑，否则暗色模式的人会先被闪一下白。
+ * The choice is stored in localStorage; reading it and setting data-theme is
+ * done by the inline script in layout. It has to run before first paint, or
+ * dark-mode users get a white flash first.
  */
 
 import { useEffect, useState } from "react";

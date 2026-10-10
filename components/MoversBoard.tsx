@@ -1,23 +1,24 @@
 "use client";
 
 /**
- * Market Movers 侧栏。
+ * Market Movers sidebar.
  *
- * 两条 PRD 里的硬规则在这里落地：
+ * Two hard rules from the PRD land here:
  *
- *   §5  低样本单元**排除出榜单**，不是显示后加标注。
- *       过滤在 SQL 里（reliability = 'ok'），这里只负责显示。
+ *   §5  Low-sample units are **excluded from the boards**, not shown with a
+ *       caveat. The filter is in the SQL (reliability = 'ok'); this
+ *       component only displays.
  *
- *   §7  基数效应：Accelerating 榜上从低位反弹的地区天然占优，
- *       所以每张卡片必须同时显示绝对价位，让人看到是
- *       "从 12,000 涨到 14,000" 还是 "从 45,000 涨到 52,000"。
+ *   §7  Base effect: areas rebounding from a low level have a built-in edge
+ *       on the Accelerating board, so every card must also show the absolute
+ *       price level, letting people see whether it went
+ *       "from 12,000 to 14,000" or "from 45,000 to 52,000".
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   board,
-  BOARDS,
-  type BoardId,
+  boardsFor,
   type GeoLevel,
   type MoverRow,
 } from "@/lib/queries";
@@ -27,7 +28,9 @@ import {
   fmtPct,
   fmtPp,
   fmtDaysDelta,
+  fmtYearsDelta,
   trendClass,
+  GEO_LEVELS,
   type Category,
 } from "@/lib/metrics";
 
@@ -36,6 +39,7 @@ const FMT = {
   yoy_real_pct: fmtPct,
   accel_pp: fmtPp,
   dom_yoy_days: fmtDaysDelta,
+  years_income_chg: fmtYearsDelta,
 } as const;
 
 export default function MoversBoard({
@@ -62,23 +66,31 @@ export default function MoversBoard({
   const [data, setData] = useState<Record<string, MoverRow[]>>({});
   const [busy, setBusy] = useState(false);
 
+  // The postal level has no income data, so the two affordability boards do not exist there.
+  const boards = useMemo(() => boardsFor(level), [level]);
+
   useEffect(() => {
     if (!dbReady || monthlyMode) return;
     let cancelled = false;
     setBusy(true);
     Promise.all(
-      BOARDS.map((b) => board(b.id, quarter, category, 5, real, level)),
+      boards.map((b) => board(b.id, quarter, category, 5, real, level)),
     )
       .then((res) => {
         if (cancelled) return;
-        setData(Object.fromEntries(BOARDS.map((b, i) => [b.id, res[i]])));
+        setData(Object.fromEntries(boards.map((b, i) => [b.id, res[i]])));
       })
       .catch((e) => console.error("[movers]", e))
       .finally(() => !cancelled && setBusy(false));
     return () => {
       cancelled = true;
     };
-  }, [quarter, category, real, level, monthlyMode, dbReady]);
+  }, [boards, quarter, category, real, level, monthlyMode, dbReady]);
+
+  // The small print states each board's threshold and basis, and the wording
+  // has to change with the level: "Kommuner with 40+ sales" at the postal
+  // level would be reporting the wrong basis.
+  const unit = GEO_LEVELS.find((l) => l.id === level)!.label;
 
   return (
     <div className="rail">
@@ -89,7 +101,7 @@ export default function MoversBoard({
             <>Monthly listings mode</>
           ) : dbReady ? (
             <>
-              Kommuner with 40+ sales in the trailing four quarters ·{" "}
+              {unit} with 40+ sales in the trailing four quarters ·{" "}
               {quarter.replace("Q", " Q")}
               {real ? " · real kroner" : ""}
             </>
@@ -111,7 +123,7 @@ export default function MoversBoard({
           </p>
         </section>
       ) : (
-      BOARDS.map((b) => (
+      boards.map((b) => (
         <section className="board" key={b.id}>
           <div className="board__h">
             <h3>{b.title}</h3>
@@ -122,10 +134,10 @@ export default function MoversBoard({
           ) : (data[b.id] ?? []).length === 0 ? (
             <p className="empty">
               {quarter < "2005"
-                ? `Transaction counts start in 2004, so no kommune can be ranked in
+                ? `Transaction counts start in 2004, so nothing can be ranked in
                    ${quarter.replace("Q", " Q")} — the map still shows published prices.`
-                : `No kommune clears the 40-sale bar for this measure in
-                   ${quarter.replace("Q", " Q")}.`}
+                : `No ${unit.toLowerCase().replace(/r$/, "")} clears the 40-sale bar
+                   for this measure in ${quarter.replace("Q", " Q")}.`}
             </p>
           ) : (
             (data[b.id] ?? []).map((r) => (
@@ -137,6 +149,11 @@ export default function MoversBoard({
                   real && b.valueColumn === "yoy_pct"
                     ? "yoy_real_pct"
                     : b.valueColumn
+                }
+                suffix={
+                  b.valueColumn === "years_income_chg" && r.years_income != null
+                    ? `now ${r.years_income.toFixed(1)} yrs`
+                    : null
                 }
                 invert={b.invert}
                 real={real}
@@ -158,6 +175,7 @@ function Row({
   invert,
   real,
   active,
+  suffix,
   onSelect,
 }: {
   row: MoverRow;
@@ -166,10 +184,12 @@ function Row({
   invert?: boolean;
   real: boolean;
   active: boolean;
+  /** On the affordability boards, show "how many years now" as well as "changed by how many years" */
+  suffix?: string | null;
   onSelect: (code: string) => void;
 }) {
   const v = row[column] as number | null;
-  // 卡片上的绝对价位也要跟着名义/实际走
+  // The absolute price on the card follows nominal/real too
   const price = real ? (row.price_4q_real ?? null) : row.price_4q;
   return (
     <button
@@ -180,10 +200,15 @@ function Row({
     >
       <span>
         <span className="row__n">{name}</span>
-        {/* 绝对价位 + 成交笔数。没有这两个数，榜单就是在诱导误读。 */}
+        {/* Absolute price + number of sales. Without these two numbers the
+            board invites misreading. */}
         <span className="row__meta num">
           {row.price_4q != null ? fmtKrM2(row.price_4q) : "—"}
-          {row.n_sold_4q != null ? ` · ${fmtInt(row.n_sold_4q)} sales` : ""}
+          {suffix
+            ? ` · ${suffix}`
+            : row.n_sold_4q != null
+              ? ` · ${fmtInt(row.n_sold_4q)} sales`
+              : ""}
         </span>
       </span>
       <span className={`row__v num ${trendClass(v, invert)}`}>

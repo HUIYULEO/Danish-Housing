@@ -1,13 +1,14 @@
-# 仓库里一律存 LF，检出时按平台。没有这个的话 Windows 上的 autocrlf
-# 会把 geojson 之类的文本换行改掉，Linux 的 CI 再检出又是一套字节。
+# Always store LF in the repo and convert per platform on checkout. Without
+# this, autocrlf on Windows rewrites the line endings of text files such as
+# geojson, and the Linux CI then checks out yet another set of bytes.
 * text=auto eol=lf
 
-# 二进制，绝对不要碰
+# Binary, never touch
 *.parquet binary
 *.wasm    binary
 *.woff2   binary
 *.png     binary
 *.jpg     binary
 
-# geojson 是文本但很大，标成不做 diff，git log 才不会刷屏
+# geojson is text but huge; marked no-diff so git log does not flood the screen
 *.geojson -diff

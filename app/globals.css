@@ -1,24 +1,25 @@
 /* ============================================================
    Danish Real Estate Market Intelligence
 
-   北欧的暖色系：亚麻、陶土、苔绿、旧木头。不是纯白，也不是纯黑。
-   浅色模式底色是亚麻布的暖灰，深色模式是暖褐黑 —— 两边都刻意避开
-   #fff / #000，屏幕上纯白刺眼，纯黑发死。
+   Warm Nordic colours: linen, terracotta, moss green, old wood. Neither pure
+   white nor pure black. The light ground is the warm grey of linen cloth,
+   the dark one a warm brown-black. Both deliberately avoid #fff / #000: on
+   a screen pure white glares and pure black looks dead.
 
-   颜色只出现在数据上，界面本身几乎不着色。
+   Colour appears only on data; the interface itself is almost uncoloured.
    ============================================================ */
 
 :root {
   color-scheme: light;
 
-  /* 纸：亚麻。带明显的暖，和地图上的陶土色阶是一家人 */
+  /* Paper: linen. Clearly warm, and of one family with the terracotta ramp on the map */
   --paper: #f4efe6;
   --paper-2: #fbf8f2;
   --paper-3: #ece5d8;
   --paper-4: #e2d9c9;
 
-  /* 海。地图背景不能是空白 —— 丹麦是个群岛国家，
-     周围那一圈本来就该是水 */
+  /* Sea. The map background must not be blank: Denmark is an archipelago,
+     and what surrounds it should be water */
   --water: #dde3e2;
   --coast: #c3ccca;
 
@@ -29,17 +30,19 @@
   --ink-2: #5f584e;
   --ink-3: #8f867a;
 
-  /* 强调色：陶土。只用在"当前选中"和交互反馈上，不参与数据编码 */
+  /* Accent: terracotta. Used only for "currently selected" and interaction
+     feedback, never for encoding data */
   --accent: #a35a38;
   --accent-soft: #f2e3d8;
   --accent-ink: #fff;
 
-  /* 数据不足的中性灰。PRD §12：灰色是一等公民，不是异常状态。
-     它要比纸稍深、比色阶更"脏"，一眼能和任何一档颜色区分开。 */
+  /* Neutral grey for insufficient data. PRD §12: grey is a first-class
+     citizen, not an error state. It has to be a little darker than paper and
+     "dirtier" than the ramps, distinguishable at a glance from any class. */
   --gray-data: #cdc5b6;
   --gray-data-line: #a89e8c;
 
-  /* 涨跌。和地图的发散色阶同源 */
+  /* Up and down. Same origin as the map's diverging ramp */
   --pos: #a8452c;
   --neg: #2c6e6a;
 
@@ -48,8 +51,9 @@
   --shadow: 0 8px 28px rgba(42, 38, 33, 0.14), 0 1px 3px rgba(42, 38, 33, 0.08);
 }
 
-/* 深色模式。默认跟随系统，masthead 上的开关可以手动覆盖。
-   两个选择器都要写：[data-theme] 让手动选择在两个方向上都能压过系统。 */
+/* Dark mode. Follows the system by default; the switch on the masthead can
+   override it by hand. Both selectors are needed: [data-theme] lets a manual
+   choice beat the system in either direction. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -133,7 +137,7 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* 所有数字都走等宽 + tabular，时间轴拖动时数字不会左右跳 */
+/* All numbers are monospaced + tabular, so they do not jump sideways when the timeline is dragged */
 .num {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
@@ -168,7 +172,7 @@ button {
   border-radius: 2px;
 }
 
-/* ---------- 版式外壳 ---------- */
+/* ---------- Layout shell ---------- */
 
 .shell {
   display: flex;
@@ -176,8 +180,10 @@ button {
   min-height: 100dvh;
 }
 
-/* 地图页锁在一屏里：只有侧栏自己滚，地图、指标切换、时间轴永远在视野内 ——
-   它们是主界面，不该要滚动才够得着。长文页不能套这个，套上正文就滚不动了。 */
+/* The map page is locked to one screen: only the sidebar scrolls, while the
+   map, metric switches and timeline stay in view. They are the main
+   interface and should not need scrolling to reach. Long-form pages must
+   not use this, or their body text could not scroll. */
 .shell--app {
   height: 100dvh;
   overflow: hidden;
@@ -251,9 +257,10 @@ button {
   color: var(--accent-ink);
 }
 
-/* ---------- 月度温度条 ---------- */
-/* PRD §6.3：月度数据比季度成交数据新四个月，但只有挂牌侧的量。
-   放在最上面一条窄带里，和下面的季度地图明确分开。 */
+/* ---------- Monthly temperature strip ---------- */
+/* PRD §6.3: monthly data is four months fresher than the quarterly sales
+   data, but only has listing-side measures. It sits in a narrow band at the
+   very top, clearly separated from the quarterly map below. */
 
 .ticker {
   display: flex;
@@ -296,8 +303,9 @@ button {
   overflow: hidden;
 }
 
-/* 一条 fun fact 是一句话，不是一个数字。给它正文的字号和一行的宽度，
-   句子和数字分成两段，数字用等宽压出来。 */
+/* A fun fact is a sentence, not a number. Give it body-text size and one
+   line of width; sentence and number are two parts, with the number set off
+   in monospace. */
 .ticker__item {
   color: var(--ink-2);
   white-space: nowrap;
@@ -372,7 +380,7 @@ button {
   color: var(--neg);
 }
 
-/* ---------- KPI 条 ---------- */
+/* ---------- KPI strip ---------- */
 
 .ribbon {
   display: flex;
@@ -412,7 +420,7 @@ button {
   margin-left: 6px;
 }
 
-/* ---------- 主体：地图 + 侧栏 ---------- */
+/* ---------- Main area: map + sidebar ---------- */
 
 .stage {
   display: grid;
@@ -463,7 +471,7 @@ button {
   color: var(--ink-2);
 }
 
-/* ---------- 地图上的浮层 ---------- */
+/* ---------- Overlays on the map ---------- */
 
 .overlay {
   position: absolute;
@@ -495,9 +503,9 @@ button {
   box-shadow: var(--shadow-sm);
 }
 
-/* 卡片顶上的那行小字：当前是哪个季度、哪种房产、名义还是实际。
-   点开某个 kommune 之后这行必须还在 —— 否则画面上就没有任何地方
-   说得清"我现在看的是什么时候的数"。 */
+/* The small line at the top of a card: which quarter, which property type,
+   nominal or real. It must still be there once a kommune is opened, or
+   nothing on screen can say "what period am I looking at". */
 .card__eyebrow {
   display: flex;
   align-items: center;
@@ -534,7 +542,7 @@ button {
   line-height: 1.45;
 }
 
-/* ---------- 图例 ---------- */
+/* ---------- Legend ---------- */
 
 .legend {
   min-width: 276px;
@@ -555,7 +563,7 @@ button {
   margin-bottom: 7px;
 }
 
-/* 离散色块。块之间留一条头发丝的缝，看得出是"档"而不是渐变。 */
+/* Discrete colour blocks. A hairline gap between blocks shows they are "classes", not a gradient. */
 .legend__bins {
   display: flex;
   gap: 1px;
@@ -568,7 +576,7 @@ button {
   border-radius: 1px;
 }
 
-/* 刻度定位在色块之间的缝上，所以用绝对定位而不是 space-between */
+/* Ticks are positioned on the gaps between blocks, hence absolute positioning rather than space-between */
 .legend__scale {
   position: relative;
   height: 14px;
@@ -662,7 +670,7 @@ button {
   color: var(--ink-3);
 }
 
-/* ---------- 控制条 ---------- */
+/* ---------- Control bar ---------- */
 
 .controls {
   display: flex;
@@ -724,7 +732,7 @@ button {
   opacity: 0.55;
 }
 
-/* ---------- 时间轴 ---------- */
+/* ---------- Timeline ---------- */
 
 .timeline {
   display: flex;
@@ -759,8 +767,9 @@ button {
   cursor: not-allowed;
 }
 
-/* 当前季度。这是画面上唯一说明"你在看哪一刻"的地方，
-   所以给它一个实体的标签，而不是一行灰字。 */
+/* The current quarter. This is the only place on screen that says "which
+   moment you are looking at", so it gets a solid label, not a line of grey
+   text. */
 .timeline__q {
   flex: 0 0 auto;
   display: inline-flex;
@@ -819,7 +828,7 @@ button {
   background: var(--line);
 }
 
-/* 当前位置在刻度带上的竖线，让"现在停在哪一年"一眼可见 */
+/* A vertical line on the tick band at the current position, so "which year it is stopped at" is visible at a glance */
 .timeline__cursor {
   position: absolute;
   top: -5px;
@@ -842,7 +851,7 @@ button {
   transform: translateX(-50%);
 }
 
-/* ---------- 侧栏 ---------- */
+/* ---------- Sidebar ---------- */
 
 .rail {
   border-left: 1px solid var(--line);
@@ -958,7 +967,7 @@ button {
   margin: 0;
 }
 
-/* ---------- 加载态 ---------- */
+/* ---------- Loading state ---------- */
 
 .loading {
   display: inline-flex;
@@ -1005,7 +1014,7 @@ button {
   }
 }
 
-/* ---------- 区域详情页 ---------- */
+/* ---------- Area detail page ---------- */
 
 .detail {
   max-width: 800px;
@@ -1151,14 +1160,14 @@ button {
   line-height: 1.5;
 }
 
-/* Plot 生成的 svg 要能跟着容器缩 */
+/* The svg Plot generates has to shrink with its container */
 .chart svg {
   max-width: 100%;
   height: auto;
   overflow: visible;
 }
 
-/* 地图卡片底部进详情页的入口 */
+/* Entry to the detail page at the bottom of the map card */
 .card__more {
   display: inline-block;
   margin-top: 11px;
@@ -1188,7 +1197,7 @@ button {
   }
 }
 
-/* ---------- 长文页 ---------- */
+/* ---------- Long-form pages ---------- */
 
 .prose {
   max-width: 700px;
@@ -1269,9 +1278,10 @@ button {
   border-bottom-color: var(--accent);
 }
 
-/* ---------- 移动端 ---------- */
-/* PRD §12：分享链接一多半在手机上打开，地图必须有可用的移动端形态，
-   排行榜降级成纵向流。 */
+/* ---------- Mobile ---------- */
+/* PRD §12: more than half of shared links are opened on a phone, so the map
+   must have a usable mobile form, with the boards degrading to a vertical
+   flow. */
 
 @media (max-width: 900px) {
   .shell--app {
@@ -1280,8 +1290,9 @@ button {
     overflow: visible;
   }
 
-  /* 窄屏下把 stage 拆开，让地图 -> 控制条 -> 时间轴 -> 排行榜 依次排。
-     不这么做的话时间轴会被六个榜单顶到页面最底下，等于没有。 */
+  /* On narrow screens the stage is split so that map -> controls -> timeline
+     -> boards stack in order. Otherwise the timeline gets pushed to the very
+     bottom of the page by six boards, as good as gone. */
   .stage {
     display: contents;
   }
@@ -1336,8 +1347,9 @@ button {
     padding: 11px 14px 10px;
   }
 
-  /* 窄屏上标签和翻页按钮会把正文挤成省略号。
-     标签缩到只剩来源，时间轴的跨度切换换行到第二行。 */
+  /* On narrow screens the label and paging buttons squeeze the text into an
+     ellipsis. The label shrinks to just the source, and the timeline's span
+     switch wraps to a second line. */
   .ticker {
     font-size: 11.5px;
   }
@@ -1373,8 +1385,9 @@ button {
     flex-basis: 100%;
   }
 
-  /* 窄屏上两个浮层加起来会吃掉大半张地图，所以两头都收紧：
-     说明文字压到三行，图例压紧。地图才是主角。 */
+  /* On narrow screens the two overlays together eat most of the map, so both
+     are tightened: the description is clamped to three lines and the legend
+     is compacted. The map is the star. */
   .overlay--tl {
     top: 9px;
     left: 9px;
@@ -1418,4 +1431,184 @@ button {
     font-size: 10px;
     line-height: 1.3;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Area search
+ *
+ * It sits in the top strip rather than in a pop-up command palette. A search
+ * box that can only be summoned by a shortcut does not exist for anyone who
+ * does not know the shortcut, and "find my own area" is exactly what a
+ * first-time visitor most wants to do.
+ * ------------------------------------------------------------------ */
+
+.ribbon__cell--search {
+  min-width: 216px;
+  flex: 1 1 216px;
+  position: relative;
+  overflow: visible;
+}
+
+.search {
+  position: relative;
+  margin-top: 3px;
+}
+
+.search__in {
+  width: 100%;
+  padding: 5px 26px 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.search__in::placeholder {
+  color: var(--ink-3);
+}
+
+.search__in:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* type=search in Safari/Chrome comes with its own clear button, which would overlap the kbd hint */
+.search__in::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.search__kbd {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--ink-3);
+  background: var(--paper-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.search__in:focus + .search__kbd {
+  opacity: 0;
+}
+
+.search__list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.search__hit {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  text-align: left;
+  border-radius: 3px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.search__hit.is-on {
+  background: var(--accent-soft);
+}
+
+.search__hit.is-off {
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.search__name {
+  flex: 1;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search__meta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+/* ------------------------------------------------------------------ *
+ * Postal drill-down table
+ * ------------------------------------------------------------------ */
+
+.drill {
+  overflow-x: auto;
+}
+
+.drill__t {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.drill__t th,
+.drill__t td {
+  padding: 6px 10px 6px 0;
+  text-align: right;
+  border-bottom: 1px solid var(--line-soft);
+  white-space: nowrap;
+}
+
+.drill__t thead th {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  border-bottom-color: var(--line);
+}
+
+.drill__t th:first-child,
+.drill__t td:first-child,
+.drill__t thead th:first-child {
+  text-align: left;
+}
+
+.drill__t tbody th {
+  font-weight: 500;
+}
+
+.drill__t tbody th a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.drill__t tbody th a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Low-sample rows are dimmed as a whole. A table has no room for a full
+   "low sample" sentence, so a dot marks them and the note goes below the
+   table. */
+.drill__t tbody tr[data-low="true"] td,
+.drill__t tbody tr[data-low="true"] th {
+  color: var(--ink-3);
 }

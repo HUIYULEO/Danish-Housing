@@ -32,13 +32,22 @@
 - **flat**（77 个 ok 单元）：YoY 中位数 10.1%，挂牌天数中位数 84 天，去化 0.9 季度
 - **holiday**（71 个 ok 单元）：YoY 中位数 6.3%，挂牌天数中位数 136 天，去化 2.5 季度
 
+## Crosswalk
+
+- postnummer 总数 1089，kommune 99 个
+- 跨多个 kommune 的 postnummer: **246**（22.6%）
+- 所以 crosswalk **只用来做 kommune 页的下钻列表**，不用来聚合数字。
+  kommune 级的价格/成交量/挂牌天数都有官方表（BM010/BM020/BM030），
+  自己按邮编聚合会把 Frederiksberg 这种被邻居吃掉的 kommune 算成 6 笔成交。
+
 ## 浏览器要下载的东西
 
 | 文件 | 大小 | gzip 后 |
 |---|---|---|
-| panel_kommune.parquet | 1.79 MB | ~0.60 MB |
+| panel_kommune.parquet | 2.20 MB | ~0.73 MB |
+| panel_postnr.parquet | 4.13 MB | ~1.38 MB |
 | panel_monthly.parquet | 2.29 MB | ~0.76 MB |
-| snapshot.json（首屏） | 84 KB | — |
+| snapshot.json（首屏） | 109 KB | — |
 
 ## 月度指标（全国，独栋）
 

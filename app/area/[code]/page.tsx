@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import AreaDetail from "@/components/AreaDetail";
+import AreaSummary from "@/components/AreaSummary";
+import { metaDescription } from "@/lib/summaries";
+import { areaPath, pageUrl } from "@/lib/site";
 import areas from "../../../public/data/areas.json";
 import snapshot from "../../../public/data/snapshot.json";
 import postnrByKommune from "../../../public/data/postnr_by_kommune.json";
@@ -15,8 +18,9 @@ interface Area {
 const LIST = (areas as Area[]).filter((a) => a.level !== "country");
 
 /**
- * 静态导出下每个区域都要预生成。114 个页面（98 kommune + 11 landsdel + 5 region），
- * 构建一秒多，换来的是每个区域都有一个可以直接分享的固定 URL。
+ * Under static export every area has to be pre-generated. 114 pages
+ * (98 kommuner + 11 landsdele + 5 regioner) build in just over a second, and
+ * in return every area has a fixed URL that can be shared directly.
  */
 export function generateStaticParams() {
   return LIST.map((a) => ({ code: a.code }));
@@ -40,7 +44,8 @@ export async function generateMetadata({
   if (!area) return { title: "Area — Danish Housing" };
   return {
     title: `${area.name} — Danish Housing`,
-    description: `House prices, selling times, transaction volume and supply in ${area.name}, from Finans Danmark and Danmarks Statistik.`,
+    description: metaDescription(area.name, area.code),
+    alternates: { canonical: pageUrl(areaPath(area.code, area.level)) },
   };
 }
 
@@ -64,6 +69,7 @@ export default async function AreaPage({
         </div>
         <nav className="masthead__nav">
           <Link href="/">Map</Link>
+          <Link href="/areas">All areas</Link>
           <Link href="/methods">Data &amp; methods</Link>
         </nav>
       </header>
@@ -75,6 +81,7 @@ export default async function AreaPage({
         latestQuarter={snapshot.quarter}
         domains={snapshot.domains as unknown as Domains}
         postnrs={codes}
+        summary={<AreaSummary code={area.code} name={area.name} />}
       />
     </div>
   );
