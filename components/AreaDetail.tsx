@@ -85,19 +85,30 @@ export default function AreaDetail({
     getConnection()
       .then(async () => {
         const found: Category[] = [];
+        // Types with a publishable price in the latest quarter, as opposed
+        // to only somewhere in their history
+        const current: Category[] = [];
         for (const c of CATEGORIES) {
           const s = await areaSeries(code, c.id, geo);
           if (s.some((r) => r.price_4q != null)) found.push(c.id);
+          const now = s.find((r) => r.quarter === latestQuarter);
+          if (now?.price_4q != null && now.reliability !== "insufficient") {
+            current.push(c.id);
+          }
         }
         if (!alive) return;
         setAvailable(found);
-        if (found.length && !found.includes("house")) setCategory(found[0]);
+        // Open on a type that has numbers today. Urban postal districts sell
+        // flats, not houses: defaulting to houses there opens the page on a
+        // row of dashes while the flat data sits one click away.
+        const open = current.length ? current : found;
+        if (open.length && !open.includes("house")) setCategory(open[0]);
       })
       .catch((e) => alive && setError(String(e?.message ?? e)));
     return () => {
       alive = false;
     };
-  }, [code, geo]);
+  }, [code, geo, latestQuarter]);
 
   useEffect(() => {
     if (!available) return;
