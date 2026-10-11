@@ -2,7 +2,7 @@
 
 **See what is happening in Danish real estate.** Thirty-four years of Danish
 house prices, selling times and supply — every kommune, every quarter, on one
-map.
+map. (Full-vibe code)
 
 ### → [huiyuleo.github.io/Danish-Housing](https://huiyuleo.github.io/Danish-Housing/)
 
