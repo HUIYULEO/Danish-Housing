@@ -13,23 +13,24 @@ map. (Full-vibe code)
 ## What the data says
 
 A few things fall out of this data that are hard to see any other way.
+Figures are for 2026 Q2; the site itself refreshes every month.
 
 **Denmark has not recovered from 2007.** Nominal prices passed the old peak
-years ago. Adjust for inflation and the country as a whole is still 4% below
-where it was in 2007 — nineteen years later. **81 of 97 kommuner** are below
-their own real peak; Vordingborg is down 40%.
+years ago. Adjust for inflation and the country as a whole is still 2% below
+where it was in 2007 — nineteen years later. **78 of 97 kommuner** are below
+their own real peak; Lolland is down 39%.
 
 **The gap is enormous.** A square metre in Frederiksberg costs **17×** what one
-in Lolland does — 88,282 kr against 5,120 kr. Zealand as a whole runs 2.9× the
+in Lolland does — 85,765 kr against 5,170 kr. Zealand as a whole runs 3.0× the
 median in Jutland.
 
-**Selling time varies more than price.** A house takes 60 days to sell in
-Egedal and 326 in Morsø. The national median is 138 days. Selling time also
+**Selling time varies more than price.** A house takes 57 days to sell in
+Egedal and 298 in Morsø. The national median is 138 days. Selling time also
 moves *before* price does, which is why it is a headline measure here rather
 than a footnote.
 
-**Some markets run backwards.** In Frederikshavn houses are up 7.6% while flats
-are down 9.9%, in the same year, in the same town.
+**Some markets run backwards.** In Haderslev houses are up 13.3% while flats
+are down 4.5%, in the same year, in the same town.
 
 Scrub the timeline back to 2009 and you can watch the last crash arrive from
 the east — Zealand deep in blue while west Jutland was still rising:
@@ -38,17 +39,21 @@ the east — Zealand deep in blue while west Jutland was still rising:
 
 ## What you can do with it
 
-- Switch between **11 landsdele, 5 regioner and 98 kommuner** — all published
-  levels, none aggregated by hand.
+- Switch between **11 landsdele, 5 regioner, 98 kommuner and 605 postnumre** —
+  all published levels, none aggregated by hand.
+- Search for any area or postal code.
 - Click any area in the rankings and the map flies to it.
 - Six measures: price, growth, days on market, transaction volume, quarters of
   supply, and the gap between asking and realised prices.
 - **Play the timeline** from 1992 to today.
-- **Adjust for inflation.** Prices are up 232% since 1995 in nominal kroner and
-  84% in real ones. That toggle changes most conclusions.
+- **Adjust for inflation.** National prices are up 317% since 1995 in nominal
+  kroner and 133% in real ones. That toggle changes most conclusions.
 - **Switch clocks.** Sale prices are quarterly — the only frequency they exist
   at. Listings are monthly and run four months ahead.
-- Open any of **114 area pages** for full history and charts.
+- Open any of **719 area pages** for full history and charts, or see every
+  area in [one table](https://huiyuleo.github.io/Danish-Housing/areas/).
+- Read it in **English or Danish** ([dansk](https://huiyuleo.github.io/Danish-Housing/da/)).
+- Share any view: the map state lives in the URL.
 - Grey means *we don't know*. Areas with too few sales are drawn neutral and
   never show a number — [see why](docs/data-notes.md).
 
