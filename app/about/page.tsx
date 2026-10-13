@@ -5,6 +5,7 @@ import { quarterLabel } from "@/lib/metrics";
 import { pageUrl } from "@/lib/site";
 
 const REPO = "https://github.com/HUIYULEO/Danish-Housing";
+const EMAIL = "luhy0629@outlook.com";
 
 export const metadata: Metadata = {
   title: "About — Danish Housing",
@@ -107,7 +108,8 @@ export default function About() {
           The code is open source under the MIT licence:{" "}
           <a href={REPO}>github.com/HUIYULEO/Danish-Housing</a>. Bug reports
           and questions are welcome as{" "}
-          <a href={`${REPO}/issues`}>issues on GitHub</a>.
+          <a href={`${REPO}/issues`}>issues on GitHub</a>, or by email at{" "}
+          <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.
         </p>
         <p>
           Housing market data: Finans Danmark, Boligmarkedsstatistikken, via
