@@ -20,7 +20,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { fmtInt, fmtKrM2, fmtPct } from "@/lib/metrics";
+import type { Fmt } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
+import type { Messages } from "@/lib/messages";
+import { useLocale } from "./LocaleProvider";
 
 export interface Monthly {
   latest: string | null;
@@ -28,9 +31,16 @@ export interface Monthly {
   series: Record<string, Record<string, number>>;
 }
 
+interface Fact {
+  label: string;
+  value: string;
+}
+
 export interface Facts {
   quarter: string;
-  facts: { label: string; value: string }[];
+  facts: Fact[];
+  /** The same facts in Danish, written by the ETL alongside the English ones */
+  facts_da?: Fact[];
 }
 
 interface Item {
@@ -51,7 +61,8 @@ export default function Ticker({
   monthly: Monthly;
   facts: Facts;
 }) {
-  const items = build(monthly, facts);
+  const { t, fmt, locale } = useLocale();
+  const items = build(monthly, facts, t, fmt, locale);
   const [i, setI] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -62,8 +73,8 @@ export default function Ticker({
 
   useEffect(() => {
     if (paused || items.length < 2) return;
-    const t = setInterval(() => go(1), ROTATE_MS);
-    return () => clearInterval(t);
+    const timer = setInterval(() => go(1), ROTATE_MS);
+    return () => clearInterval(timer);
   }, [paused, go, items.length]);
 
   if (!items.length) return null;
@@ -90,20 +101,20 @@ export default function Ticker({
                 (it.invert ? -it.delta : it.delta) > 0 ? "up" : "down"
               }`}
             >
-              {fmtPct(it.delta)} y/y
+              {fmt.pct(it.delta)} {t.ticker.yoy}
             </i>
           )}
         </span>
       </div>
 
       <div className="ticker__nav">
-        <button type="button" onClick={() => go(-1)} aria-label="Previous">
+        <button type="button" onClick={() => go(-1)} aria-label={t.ticker.previous}>
           ‹
         </button>
         <span className="ticker__count num">
           {i + 1}/{items.length}
         </span>
-        <button type="button" onClick={() => go(1)} aria-label="Next">
+        <button type="button" onClick={() => go(1)} aria-label={t.ticker.next}>
           ›
         </button>
       </div>
@@ -111,12 +122,18 @@ export default function Ticker({
   );
 }
 
-function build(monthly: Monthly, facts: Facts): Item[] {
+function build(
+  monthly: Monthly,
+  facts: Facts,
+  t: Messages,
+  fmt: Fmt,
+  locale: Locale,
+): Item[] {
   const out: Item[] = [];
   const { months, series } = monthly ?? {};
 
   if (months?.length) {
-    const tag = `${fmtMonth(months[months.length - 1])} · listings`;
+    const tag = `${fmt.month(months[months.length - 1])} · ${t.ticker.listings}`;
     const cur = series[months[months.length - 1]] ?? {};
     const back = months[months.length - 13];
     const prev = back ? (series[back] ?? {}) : {};
@@ -126,8 +143,8 @@ function build(monthly: Monthly, facts: Facts): Item[] {
     if (cur.for_sale != null)
       out.push({
         tag,
-        label: "Houses on the market right now",
-        value: fmtInt(cur.for_sale),
+        label: t.ticker.onMarket,
+        value: fmt.int(cur.for_sale),
         delta: yoy("for_sale"),
         invert: true,
       });
@@ -139,39 +156,32 @@ function build(monthly: Monthly, facts: Facts): Item[] {
       // ones sell fast, and what remains is the unsold lot.
       out.push({
         tag,
-        label: "They are asking, on average",
-        value: fmtKrM2(cur.asking_price),
+        label: t.ticker.asking,
+        value: fmt.krM2(cur.asking_price),
         delta: yoy("asking_price"),
       });
     if (cur.days_listed != null)
       out.push({
         tag,
-        label: "And have been waiting",
-        value: `${Math.round(cur.days_listed)} days`,
+        label: t.ticker.waiting,
+        value: fmt.days(cur.days_listed),
         delta: yoy("days_listed"),
         invert: true,
       });
     if (cur.withdrawn != null)
       out.push({
         tag,
-        label: "Taken off the market unsold this month",
-        value: fmtInt(cur.withdrawn),
+        label: t.ticker.withdrawn,
+        value: fmt.int(cur.withdrawn),
         delta: yoy("withdrawn"),
         invert: true,
       });
   }
 
-  for (const f of facts?.facts ?? []) {
-    out.push({ tag: "Worth knowing", label: f.label, value: f.value });
+  // Fall back to English if the data predates the Danish facts
+  const list = (locale === "da" ? facts?.facts_da : null) ?? facts?.facts ?? [];
+  for (const f of list) {
+    out.push({ tag: t.ticker.worthKnowing, label: f.label, value: f.value });
   }
   return out;
-}
-
-function fmtMonth(m: string) {
-  const [y, mm] = m.split("M");
-  const name = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ][Number(mm) - 1];
-  return `${name} ${y}`;
 }

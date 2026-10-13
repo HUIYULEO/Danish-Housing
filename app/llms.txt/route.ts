@@ -1,5 +1,5 @@
 import facts from "../../public/data/facts.json";
-import { SUMMARY_QUARTER } from "@/lib/summaries";
+import { summaryQuarter } from "@/lib/summaries";
 import { pageUrl } from "@/lib/site";
 
 export const dynamic = "force-static";
@@ -10,6 +10,7 @@ export const dynamic = "force-static";
  * facts.json, so they follow the data on every refresh.
  */
 export function GET() {
+  const quarter = summaryQuarter("en");
   const found = (facts as { facts: { label: string; value: string }[] }).facts
     .map((f) => `- ${f.label}: ${f.value}`)
     .join("\n");
@@ -18,7 +19,7 @@ export function GET() {
 
 > Thirty-four years of Danish house prices, selling times, transaction volume and supply, for every kommune and postal district, every quarter since 1992. A data visualisation, not a valuation, a forecast or advice.
 
-Latest quarter: ${SUMMARY_QUARTER}. All figures are official statistics from Finans Danmark (Boligmarkedsstatistikken) and Danmarks Statistik; nothing is scraped, estimated or modelled. Prices are realised sale prices in kroner per square metre, averaged over the trailing four quarters. Areas with fewer than 10 sales in four quarters show no number.
+Latest quarter: ${quarter}. All figures are official statistics from Finans Danmark (Boligmarkedsstatistikken) and Danmarks Statistik; nothing is scraped, estimated or modelled. Prices are realised sale prices in kroner per square metre, averaged over the trailing four quarters. Areas with fewer than 10 sales in four quarters show no number.
 
 ## Pages
 
@@ -26,9 +27,10 @@ Latest quarter: ${SUMMARY_QUARTER}. All figures are official statistics from Fin
 - [All areas](${pageUrl("/areas/")}): one table with the latest price, growth and selling time for every area, linking to each area page
 - [Data & methods](${pageUrl("/methods/")}): sources, definitions, sample-size rules and known limits
 - [About](${pageUrl("/about/")}): who built it, how it is built, and the source code
+- Danish version: every page above also exists in Danish under ${pageUrl("/da/")}
 - Area pages: ${pageUrl("/area/")}<kommune code>/ and ${pageUrl("/area/postnr/")}<postal code>/, each stating its latest figures in plain text
 
-## Findings, ${SUMMARY_QUARTER}
+## Findings, ${quarter}
 
 ${found}
 

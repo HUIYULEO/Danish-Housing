@@ -6,23 +6,31 @@
  * connection gets the substance without running any JavaScript.
  */
 
+import { formatters } from "@/lib/format";
+import type { Locale } from "@/lib/i18n";
+import { MESSAGES } from "@/lib/messages";
 import { describe, hasPrice, summaryOf } from "@/lib/summaries";
-import { fmtKrM2 } from "@/lib/metrics";
 
-export default function AreaSummary({ code, name }: { code: string; name: string }) {
+export default function AreaSummary({
+  locale,
+  code,
+  name,
+}: {
+  locale: Locale;
+  code: string;
+  name: string;
+}) {
+  const t = MESSAGES[locale];
   const all = summaryOf(code);
   const lines = (["house", "flat", "holiday"] as const)
-    .map((cat) => describe(name, cat, all[cat]))
+    .map((cat) => describe(locale, name, cat, all[cat]))
     .filter((l): l is string => l !== null);
   const national = summaryOf("00").house;
 
   if (!lines.length) {
     return (
       <section className="detail__block">
-        <p className="detail__prose">
-          Too few homes change hands in {name} for a square-metre price to be
-          published, so no figure is shown.
-        </p>
+        <p className="detail__prose">{t.summary.tooFew(name)}</p>
       </section>
     );
   }
@@ -36,7 +44,7 @@ export default function AreaSummary({ code, name }: { code: string; name: string
       ))}
       {code !== "00" && hasPrice(all.house) && hasPrice(national) && (
         <p className="detail__prose">
-          Houses across Denmark as a whole sold for {fmtKrM2(national.price)}.
+          {t.summary.national(formatters(locale).krM2(national.price))}
         </p>
       )}
     </section>

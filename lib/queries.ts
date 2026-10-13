@@ -151,8 +151,6 @@ export type BoardId =
 
 export interface BoardSpec {
   id: BoardId;
-  title: string;
-  hint: string;
   /** Which column the card shows on its right */
   valueColumn: "yoy_pct" | "accel_pp" | "dom_yoy_days" | "years_income_chg";
   /** Whether to invert the value colouring (falling days is good news) */
@@ -161,57 +159,42 @@ export interface BoardSpec {
   kommuneOnly?: boolean;
 }
 
+/** Titles and hints are in MESSAGES.boards. */
 export const BOARDS: BoardSpec[] = [
   {
     id: "rising",
-    title: "Fastest rising",
-    hint: "Biggest year-on-year price gain",
     valueColumn: "yoy_pct",
   },
   {
     id: "falling",
-    title: "Fastest falling",
-    hint: "Biggest year-on-year price fall",
     valueColumn: "yoy_pct",
   },
   {
     id: "accelerating",
-    title: "Accelerating",
-    hint: "Growth speeding up, and still positive",
     valueColumn: "accel_pp",
   },
   {
     id: "cooling",
-    title: "Cooling",
-    hint: "Growth slowing, but still positive",
     valueColumn: "accel_pp",
   },
   {
     id: "heating",
-    title: "Heating up",
-    hint: "Selling faster than a year ago",
     valueColumn: "dom_yoy_days",
     invert: true,
   },
   {
     id: "stalling",
-    title: "Stalling",
-    hint: "Taking longer to sell than a year ago",
     valueColumn: "dom_yoy_days",
     invert: true,
   },
   {
     id: "stretching",
-    title: "Stretching",
-    hint: "Prices pulling away from local incomes fastest",
     valueColumn: "years_income_chg",
     invert: true,
     kommuneOnly: true,
   },
   {
     id: "easing",
-    title: "Coming back in reach",
-    hint: "Local incomes gaining on prices fastest",
     valueColumn: "years_income_chg",
     invert: true,
     kommuneOnly: true,

@@ -27,19 +27,13 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocale } from "./LocaleProvider";
 
 export interface SearchArea {
   code: string;
   name: string;
   level: "landsdel" | "region" | "kommune" | "postnr";
 }
-
-const LEVEL_LABEL: Record<SearchArea["level"], string> = {
-  landsdel: "Landsdel",
-  region: "Region",
-  kommune: "Kommune",
-  postnr: "Postnr",
-};
 
 /** Level weights for sorting. On an equal match, larger levels come first. */
 const LEVEL_RANK: Record<SearchArea["level"], number> = {
@@ -78,6 +72,7 @@ export default function AreaSearch({
   /** Postal codes cannot be queried before DuckDB is up */
   postnrReady: boolean;
 }) {
+  const { t } = useLocale();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
@@ -186,8 +181,8 @@ export default function AreaSearch({
         className="search__in"
         type="search"
         value={q}
-        placeholder="Search an area or postcode"
-        aria-label="Search for a kommune, landsdel, region or postal district"
+        placeholder={t.search.placeholder}
+        aria-label={t.search.aria}
         aria-expanded={showList}
         aria-controls={listId}
         aria-autocomplete="list"
@@ -218,15 +213,11 @@ export default function AreaSearch({
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => choose(a)}
                 disabled={!usable(a)}
-                title={
-                  usable(a)
-                    ? undefined
-                    : "Postal districts unlock once the query engine has loaded"
-                }
+                title={usable(a) ? undefined : t.search.locked}
               >
                 <span className="search__name">{a.name}</span>
                 <span className="search__meta num">
-                  {a.level === "postnr" ? a.code : LEVEL_LABEL[a.level]}
+                  {a.level === "postnr" ? a.code : t.levels[a.level].one}
                 </span>
               </button>
             </li>

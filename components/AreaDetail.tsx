@@ -19,6 +19,7 @@ import * as Plot from "@observablehq/plot";
 import Chart, { cssVar, plotBase } from "./Chart";
 import ThemeToggle, { useTheme } from "./ThemeToggle";
 import { RealToggle, CategoryPicker } from "./Controls";
+import { useLocale } from "./LocaleProvider";
 import { getConnection } from "@/lib/db";
 import {
   areaSeries,
@@ -28,15 +29,7 @@ import {
 } from "@/lib/queries";
 import {
   CATEGORIES,
-  fmtDays,
-  fmtInt,
-  fmtKrM2,
-  fmtPct,
-  fmtQ,
-  fmtYears,
-  quarterLabel,
   trendClass,
-  RELIABILITY_NOTE,
   type Category,
   type Domains,
   type PanelRow,
@@ -71,6 +64,7 @@ export default function AreaDetail({
   // numbers sit in two different panels
   const geo: GeoLevel = level === "postnr" ? "postnr" : "kommune";
   const [theme, themeChoice, setThemeChoice] = useTheme();
+  const { t, fmt, href } = useLocale();
   const [category, setCategory] = useState<Category>("house");
   const [real, setReal] = useState(false);
   const [series, setSeries] = useState<Point[] | null>(null);
@@ -194,17 +188,11 @@ export default function AreaDetail({
         <div>
           <h1 className="detail__title">{name}</h1>
           <p className="detail__sub">
-            {level === "kommune"
-              ? "Kommune"
-              : level === "region"
-                ? "Region"
-                : level === "postnr"
-                  ? "Postal district"
-                  : "Landsdel"}{" "}
-            · {quarterLabel(latestQuarter)}
-            {latest && RELIABILITY_NOTE[latest.reliability as Reliability] && (
+            {t.levels[level as keyof typeof t.levels]?.one ?? level} ·{" "}
+            {fmt.quarter(latestQuarter)}
+            {latest && latest.reliability !== "ok" && (
               <span className="detail__flag">
-                {RELIABILITY_NOTE[latest.reliability as Reliability]}
+                {t.reliability[latest.reliability as Exclude<Reliability, "ok">]}
               </span>
             )}
           </p>
@@ -214,7 +202,7 @@ export default function AreaDetail({
 
       {error && (
         <p className="empty">
-          Could not load the history for this area — {error}
+          {t.detail.loadError} — {error}
         </p>
       )}
 
@@ -223,15 +211,10 @@ export default function AreaDetail({
       {insufficient ? (
         // PRD §9: areas with insufficient data get a page too, and it says why
         <section className="detail__block">
+          <p className="detail__prose">{t.detail.noSeries(name)}</p>
           <p className="detail__prose">
-            Finans Danmark publishes no price series for {name}. That is not a
-            gap in this site — it means too few homes change hands here for a
-            square-metre price to be meaningful, so the figure is withheld at
-            source rather than published as a number nobody should trust.
-          </p>
-          <p className="detail__prose">
-            <Link href="/">Back to the map</Link>, where {name} is drawn in
-            neutral grey for exactly this reason.
+            <Link href={href("/")}>{t.detail.backToMap}</Link>
+            {t.detail.greyReason(name)}
           </p>
         </section>
       ) : (
@@ -247,40 +230,40 @@ export default function AreaDetail({
 
           <section className="statgrid">
             <Stat
-              k={real ? "Price, today's kroner" : "Price"}
-              v={latest ? fmtOrDash(val(latest, priceCol), fmtKrM2) : "—"}
-              sub="per m², 4-quarter average"
+              k={real ? t.card.priceReal : t.card.price}
+              v={latest ? fmtOrDash(val(latest, priceCol), fmt.krM2) : "—"}
+              sub={t.detail.subPrice}
             />
             <Stat
-              k={real ? "Year on year, real" : "Year on year"}
-              v={latest ? fmtOrDash(val(latest, yoyCol), fmtPct) : "—"}
+              k={real ? t.card.yoyReal : t.card.yoy}
+              v={latest ? fmtOrDash(val(latest, yoyCol), fmt.pct) : "—"}
               cls={latest ? trendClass(val(latest, yoyCol)) : ""}
             />
             <Stat
-              k="Days on market"
-              v={latest ? fmtOrDash(latest.dom_4q, fmtDays) : "—"}
-              sub="median, listing to sale"
+              k={t.card.dom}
+              v={latest ? fmtOrDash(latest.dom_4q, fmt.days) : "—"}
+              sub={t.detail.subDom}
             />
             <Stat
-              k="Sales"
-              v={latest ? fmtOrDash(latest.n_sold_4q, fmtInt) : "—"}
-              sub="trailing four quarters"
+              k={t.detail.sales}
+              v={latest ? fmtOrDash(latest.n_sold_4q, fmt.int) : "—"}
+              sub={t.detail.subSales}
             />
             <Stat
-              k="Quarters of supply"
-              v={latest ? fmtOrDash(latest.quarters_of_supply, fmtQ) : "—"}
-              sub="stock ÷ sales"
+              k={t.card.supply}
+              v={latest ? fmtOrDash(latest.quarters_of_supply, fmt.q) : "—"}
+              sub={t.detail.subSupply}
             />
             <Stat
-              k="Asking vs realised"
-              v={latest ? fmtOrDash(latest.discount_pct, fmtPct) : "—"}
-              sub="negative = sold under asking"
+              k={t.card.gap}
+              v={latest ? fmtOrDash(latest.discount_pct, fmt.pct) : "—"}
+              sub={t.detail.subGap}
             />
             {latest?.years_income != null && (
               <Stat
-                k="Years of income"
-                v={fmtOrDash(latest.years_income, fmtYears)}
-                sub={`for 100 m², family income ${latest.income_year ?? ""}`}
+                k={t.card.yearsIncome}
+                v={fmtOrDash(latest.years_income, fmt.years)}
+                sub={t.detail.subIncome(latest.income_year ?? "")}
               />
             )}
           </section>
@@ -289,21 +272,17 @@ export default function AreaDetail({
             <div className="detail__block">
               <span className="loading">
                 <span className="loading__dot" />
-                Loading history…
+                {t.card.loading}
               </span>
             </div>
           ) : (
             <>
               <section className="detail__block">
-                <h2 className="detail__h2">
-                  Price against the national average
-                </h2>
+                <h2 className="detail__h2">{t.detail.chartPrice}</h2>
                 <Chart
                   height={210}
                   deps={[priceRows, natRows, theme, real]}
-                  caption={`${name} in colour, all of Denmark dashed in grey. ${
-                    real ? "Deflated to today's kroner." : "Nominal kroner."
-                  }`}
+                  caption={t.detail.captionPrice(name, real)}
                   options={() => ({
                     ...plotBase(760, 210),
                     y: { label: null, grid: true, ticks: 4 },
@@ -329,19 +308,11 @@ export default function AreaDetail({
 
               {affordRows.length > 8 && (
                 <section className="detail__block">
-                  <h2 className="detail__h2">
-                    Years of income to buy 100 m²
-                  </h2>
+                  <h2 className="detail__h2">{t.detail.chartAfford}</h2>
                   <Chart
                     height={180}
                     deps={[affordRows, affordNatRows, theme]}
-                    caption={
-                      "Local price per m² × 100, divided by average disposable " +
-                      "family income in the same area and year. " +
-                      `${name} in colour, all of Denmark dashed. ` +
-                      "Both halves are same-year kroner, so inflation cancels " +
-                      "and the nominal/real switch does not apply here."
-                    }
+                    caption={t.detail.captionAfford(name)}
                     options={() => ({
                       ...plotBase(760, 180),
                       y: { label: null, grid: true, ticks: 4 },
@@ -368,7 +339,7 @@ export default function AreaDetail({
 
               <section className="detail__block detail__block--two">
                 <div>
-                  <h2 className="detail__h2">Homes sold each quarter</h2>
+                  <h2 className="detail__h2">{t.detail.chartSold}</h2>
                   <Chart
                     height={170}
                     deps={[series, theme]}
@@ -391,7 +362,7 @@ export default function AreaDetail({
                   />
                 </div>
                 <div>
-                  <h2 className="detail__h2">Days on market</h2>
+                  <h2 className="detail__h2">{t.detail.chartDom}</h2>
                   <Chart
                     height={170}
                     deps={[series, theme]}
@@ -418,53 +389,49 @@ export default function AreaDetail({
 
           {postnrs.length > 0 && (
             <section className="detail__block">
-              <h2 className="detail__h2">Inside {name}</h2>
+              <h2 className="detail__h2">{t.detail.inside(name)}</h2>
               {drill === null ? (
                 <span className="loading">
                   <span className="loading__dot" />
-                  Loading postal districts…
+                  {t.detail.loadingPostnr}
                 </span>
               ) : drill.length === 0 ? (
                 <p className="detail__note">
-                  None of the {postnrs.length} postal districts here had enough{" "}
-                  {category === "house"
-                    ? "house"
-                    : category === "flat"
-                      ? "flat"
-                      : "holiday-home"}{" "}
-                  sales in the four quarters to {quarterLabel(latestQuarter)} to
-                  report a price. The kommune total above is still published —
-                  it pools all of them.
+                  {t.detail.drillNone(
+                    postnrs.length,
+                    t.categories[category].one,
+                    fmt.quarter(latestQuarter),
+                  )}
                 </p>
               ) : (
                 <div className="drill">
                   <table className="drill__t">
                     <thead>
                       <tr>
-                        <th scope="col">Postal district</th>
-                        <th scope="col">Price</th>
-                        <th scope="col">Year on year</th>
-                        <th scope="col">Days</th>
-                        <th scope="col">Sales</th>
+                        <th scope="col">{t.detail.colPostnr}</th>
+                        <th scope="col">{t.detail.colPrice}</th>
+                        <th scope="col">{t.detail.colYoy}</th>
+                        <th scope="col">{t.detail.colDays}</th>
+                        <th scope="col">{t.detail.colSales}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {drill.map((r) => (
                         <tr key={r.area_code} data-low={r.reliability === "low"}>
                           <th scope="row">
-                            <Link href={`/area/postnr/${r.area_code}`}>
+                            <Link href={href(`/area/postnr/${r.area_code}`)}>
                               <span className="num">{r.area_code}</span>
                             </Link>
                           </th>
                           <td className="num">
-                            {fmtOrDash(r.price_4q, fmtKrM2)}
+                            {fmtOrDash(r.price_4q, fmt.krM2)}
                           </td>
                           <td className={`num ${trendClass(r.yoy_pct)}`}>
-                            {fmtOrDash(r.yoy_pct, fmtPct)}
+                            {fmtOrDash(r.yoy_pct, fmt.pct)}
                           </td>
-                          <td className="num">{fmtOrDash(r.dom_4q, fmtDays)}</td>
+                          <td className="num">{fmtOrDash(r.dom_4q, fmt.days)}</td>
                           <td className="num">
-                            {fmtOrDash(r.n_sold_4q, fmtInt)}
+                            {fmtOrDash(r.n_sold_4q, fmt.int)}
                             {r.reliability === "low" ? " ·" : ""}
                           </td>
                         </tr>
@@ -472,20 +439,13 @@ export default function AreaDetail({
                     </tbody>
                   </table>
                   <p className="detail__note">
-                    Rows marked · have 10-39 sales in the trailing four
-                    quarters: shown, but kept off the rankings. Districts with
-                    fewer than 10 are left out entirely.
-                    {drill.length < postnrs.length && (
-                      <>
-                        {" "}
-                        {postnrs.length - drill.length} of {postnrs.length}{" "}
-                        districts here are below that bar this quarter.
-                      </>
-                    )}{" "}
-                    These are each district&apos;s own published figures, not
-                    the kommune total split up — and about 23% of Danish postal
-                    districts straddle a kommune boundary, so they will not add
-                    back up to it.
+                    {t.detail.drillNote}
+                    {drill.length < postnrs.length &&
+                      t.detail.drillBelow(
+                        postnrs.length - drill.length,
+                        postnrs.length,
+                      )}
+                    {t.detail.drillOwn}
                   </p>
                 </div>
               )}
@@ -495,7 +455,7 @@ export default function AreaDetail({
       )}
 
       <p className="detail__back">
-        <Link href="/">← Back to the map</Link>
+        <Link href={href("/")}>← {t.detail.backToMap}</Link>
       </p>
     </main>
   );

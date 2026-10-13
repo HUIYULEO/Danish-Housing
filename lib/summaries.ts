@@ -4,18 +4,14 @@
  * The charts on an area page are drawn by DuckDB in the browser, which
  * crawlers and LLM fetchers do not run. These numbers are written into the
  * static HTML at build time so the page says something without JavaScript.
- * Do not import this from a client component: it would ship all 718 areas.
+ * Do not import this from a client component: it would ship every area.
  */
 
 import raw from "../public/data/summaries.json";
-import {
-  fmtDays,
-  fmtInt,
-  fmtKrM2,
-  fmtPct,
-  quarterLabel,
-  type Category,
-} from "./metrics";
+import { formatters } from "./format";
+import type { Locale } from "./i18n";
+import { MESSAGES } from "./messages";
+import type { Category } from "./metrics";
 
 export interface Summary {
   reliability: string;
@@ -27,7 +23,9 @@ export interface Summary {
 
 const AREAS = raw.areas as Record<string, Partial<Record<Category, Summary>>>;
 
-export const SUMMARY_QUARTER = quarterLabel(raw.quarter);
+/** The quarter the summaries are for, written out in the given language. */
+export const summaryQuarter = (locale: Locale) =>
+  formatters(locale).quarter(raw.quarter);
 
 export const summaryOf = (code: string) => AREAS[code] ?? {};
 
@@ -35,44 +33,49 @@ export const summaryOf = (code: string) => AREAS[code] ?? {};
 export const hasPrice = (s: Summary | undefined): s is Summary & { price: number } =>
   !!s && s.reliability !== "insufficient" && s.price != null;
 
-const NOUN: Record<Category, string> = {
-  house: "houses",
-  flat: "flats",
-  holiday: "holiday homes",
-};
-
 /** One plain sentence or two about a property type in an area, or null if
  *  there is no publishable price. */
-export function describe(name: string, cat: Category, s: Summary | undefined) {
+export function describe(
+  locale: Locale,
+  name: string,
+  cat: Category,
+  s: Summary | undefined,
+) {
   if (!hasPrice(s)) return null;
+  const t = MESSAGES[locale];
+  const fmt = formatters(locale);
   const parts = [
-    `In ${SUMMARY_QUARTER}, ${NOUN[cat]} in ${name} sold for ${fmtKrM2(s.price)} ` +
-      `on a trailing four-quarter average` +
-      (s.yoy != null ? `, ${fmtPct(s.yoy)} on a year earlier.` : "."),
+    t.summary.price(
+      summaryQuarter(locale),
+      t.categories[cat].noun,
+      name,
+      fmt.krM2(s.price),
+      s.yoy != null ? fmt.pct(s.yoy) : null,
+    ),
   ];
-  if (s.dom != null) parts.push(`A sale took ${fmtDays(s.dom)} on average.`);
+  if (s.dom != null) parts.push(t.summary.dom(fmt.days(s.dom)));
   if (s.sales != null) {
-    parts.push(
-      `${fmtInt(s.sales)} changed hands over the four quarters` +
-        (s.reliability === "low" ? ", a low sample." : "."),
-    );
+    parts.push(t.summary.sales(fmt.int(s.sales), s.reliability === "low"));
   }
   return parts.join(" ");
 }
 
 /** For <meta name="description">: the house line, or whichever type has data. */
-export function metaDescription(name: string, code: string) {
+export function metaDescription(locale: Locale, name: string, code: string) {
+  const t = MESSAGES[locale];
+  const fmt = formatters(locale);
   const all = summaryOf(code);
   for (const cat of ["house", "flat", "holiday"] as const) {
     const s = all[cat];
     if (!hasPrice(s)) continue;
-    return (
-      `${NOUN[cat][0].toUpperCase()}${NOUN[cat].slice(1)} in ${name}: ` +
-      `${fmtKrM2(s.price)} in ${SUMMARY_QUARTER}` +
-      (s.yoy != null ? `, ${fmtPct(s.yoy)} year on year` : "") +
-      (s.dom != null ? `, ${fmtDays(s.dom)} to sell` : "") +
-      `. Prices, selling times, volume and supply since 1992, from Finans Danmark.`
+    return t.summary.meta(
+      t.categories[cat].label,
+      name,
+      fmt.krM2(s.price),
+      summaryQuarter(locale),
+      s.yoy != null ? fmt.pct(s.yoy) : null,
+      s.dom != null ? fmt.days(s.dom) : null,
     );
   }
-  return `Too few homes sell in ${name} for a square-metre price to be published. Data from Finans Danmark.`;
+  return t.summary.metaNone(name);
 }

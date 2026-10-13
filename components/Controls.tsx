@@ -3,12 +3,12 @@
 import {
   CATEGORIES,
   metricsFor,
-  quarterLabel,
   type Category,
   type Frequency,
   type Metric,
   type MetricId,
 } from "@/lib/metrics";
+import { useLocale } from "./LocaleProvider";
 
 export function Segmented<T extends string>({
   label,
@@ -56,12 +56,13 @@ export function MetricPicker({
   /** The postal level has no income data, so Years of income is not listed there */
   level?: string;
 }) {
+  const { t, locale } = useLocale();
   return (
     <Segmented
-      label="Measure"
+      label={t.controls.measure}
       value={value}
       onChange={onChange}
-      options={metricsFor(freq, level).map((m) => ({
+      options={metricsFor(freq, level, locale).map((m) => ({
         id: m.id,
         label: m.short,
         title: m.blurb,
@@ -80,16 +81,17 @@ export function CategoryPicker({
   /** Show only these types. PRD §9: types without data are simply not shown; no empty charts. */
   only?: Category[];
 }) {
+  const { t } = useLocale();
   const list = only ? CATEGORIES.filter((c) => only.includes(c.id)) : CATEGORIES;
   return (
     <Segmented
-      label="Homes"
+      label={t.controls.homes}
       value={value}
       onChange={onChange}
       options={list.map((c) => ({
         id: c.id,
-        label: c.label,
-        title: c.note,
+        label: t.categories[c.id].label,
+        title: t.categories[c.id].note,
       }))}
     />
   );
@@ -123,29 +125,19 @@ export function Headline({
    *  behind prices, and that has to be stated up front. */
   incomeYear?: number | null;
 }) {
-  const cat = CATEGORIES.find((c) => c.id === category)!;
+  const { t } = useLocale();
   const gray = total - colored;
   return (
     <div className="card">
       <Eyebrow quarter={quarter} category={category} real={real} />
       <div className="card__t">
-        {metric.label} · {cat.label.toLowerCase()}
+        {metric.label} · {t.categories[category].label.toLowerCase()}
       </div>
       <div className="card__s">
         {metric.blurb}
-        {gray > 0 && (
-          <>
-            {" "}
-            {gray} of {total} {levelLabel} are grey: too little data to put a
-            number on.
-          </>
-        )}
+        {gray > 0 && <> {t.headline.grey(gray, total, levelLabel)}</>}
         {metric.id === "afford" && incomeYear != null && (
-          <>
-            {" "}
-            Prices are {quarter}; incomes are {incomeYear}, the latest year
-            Danmarks Statistik has published.
-          </>
+          <> {t.headline.afford(quarter, incomeYear)}</>
         )}
       </div>
     </div>
@@ -162,12 +154,12 @@ export function Eyebrow({
   category: Category;
   real: boolean;
 }) {
-  const cat = CATEGORIES.find((c) => c.id === category)!;
+  const { t } = useLocale();
   return (
     <div className="card__eyebrow">
       <b>{quarter}</b>
-      <span>{cat.label}</span>
-      <span>{real ? "Real kroner" : "Nominal"}</span>
+      <span>{t.categories[category].label}</span>
+      <span>{real ? t.controls.realShort : t.controls.nominal}</span>
     </div>
   );
 }
@@ -188,23 +180,16 @@ export function RealToggle({
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
+  const { t } = useLocale();
   return (
     <Segmented
-      label="Kroner"
+      label={t.controls.kroner}
       value={value ? "real" : "nominal"}
       disabled={disabled}
       onChange={(v) => onChange(v === "real")}
       options={[
-        {
-          id: "nominal",
-          label: "Nominal",
-          title: "Prices as they were quoted at the time",
-        },
-        {
-          id: "real",
-          label: "Inflation-adjusted",
-          title: "Deflated to today's kroner using the consumer price index",
-        },
+        { id: "nominal", label: t.controls.nominal, title: t.controls.nominalTitle },
+        { id: "real", label: t.controls.real, title: t.controls.realTitle },
       ]}
     />
   );

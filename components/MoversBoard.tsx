@@ -22,25 +22,18 @@ import {
   type GeoLevel,
   type MoverRow,
 } from "@/lib/queries";
-import {
-  fmtInt,
-  fmtKrM2,
-  fmtPct,
-  fmtPp,
-  fmtDaysDelta,
-  fmtYearsDelta,
-  trendClass,
-  GEO_LEVELS,
-  type Category,
-} from "@/lib/metrics";
+import { trendClass, GEO_LEVELS, type Category } from "@/lib/metrics";
+import type { FmtKey } from "@/lib/format";
+import { useLocale } from "./LocaleProvider";
 
+/** Which formatter each ranked column uses */
 const FMT = {
-  yoy_pct: fmtPct,
-  yoy_real_pct: fmtPct,
-  accel_pp: fmtPp,
-  dom_yoy_days: fmtDaysDelta,
-  years_income_chg: fmtYearsDelta,
-} as const;
+  yoy_pct: "pct",
+  yoy_real_pct: "pct",
+  accel_pp: "pp",
+  dom_yoy_days: "daysDelta",
+  years_income_chg: "yearsDelta",
+} as const satisfies Record<string, FmtKey>;
 
 export default function MoversBoard({
   quarter,
@@ -63,6 +56,7 @@ export default function MoversBoard({
   selected: string | null;
   onSelect: (code: string) => void;
 }) {
+  const { t, fmt } = useLocale();
   const [data, setData] = useState<Record<string, MoverRow[]>>({});
   const [busy, setBusy] = useState(false);
 
@@ -95,20 +89,19 @@ export default function MoversBoard({
   return (
     <div className="rail">
       <div className="rail__head">
-        <div className="rail__title">Market movers</div>
+        <div className="rail__title">{t.movers.title}</div>
         <div className="rail__sub">
           {monthlyMode ? (
-            <>Monthly listings mode</>
+            <>{t.movers.monthlyMode}</>
           ) : dbReady ? (
             <>
-              {unit} with 40+ sales in the trailing four quarters ·{" "}
-              {quarter.replace("Q", " Q")}
-              {real ? " · real kroner" : ""}
+              {t.movers.basis(unit, fmt.quarter(quarter))}
+              {real ? t.movers.realSuffix : ""}
             </>
           ) : (
             <span className="loading">
               <span className="loading__dot" />
-              Loading full history…
+              {t.movers.loading}
             </span>
           )}
         </div>
@@ -117,27 +110,25 @@ export default function MoversBoard({
       {monthlyMode ? (
         <section className="board">
           <p className="empty">
-            The rankings rank movements in realised prices, which only exist
-            quarterly. Switch back to <strong>Quarterly · sold</strong> to see
-            them. The map is still live — it is showing listings.
+            {t.movers.monthlyBefore}
+            <strong>{t.controls.quarterly}</strong>
+            {t.movers.monthlyAfter}
           </p>
         </section>
       ) : (
       boards.map((b) => (
         <section className="board" key={b.id}>
           <div className="board__h">
-            <h3>{b.title}</h3>
-            <em>{b.hint}</em>
+            <h3>{t.boards[b.id].title}</h3>
+            <em>{t.boards[b.id].hint}</em>
           </div>
           {!dbReady || (busy && !data[b.id]) ? (
             <Skeletons />
           ) : (data[b.id] ?? []).length === 0 ? (
             <p className="empty">
               {quarter < "2005"
-                ? `Transaction counts start in 2004, so nothing can be ranked in
-                   ${quarter.replace("Q", " Q")} — the map still shows published prices.`
-                : `No ${unit.toLowerCase().replace(/r$/, "")} clears the 40-sale bar
-                   for this measure in ${quarter.replace("Q", " Q")}.`}
+                ? t.movers.before2004(fmt.quarter(quarter))
+                : t.movers.none(unit, fmt.quarter(quarter))}
             </p>
           ) : (
             (data[b.id] ?? []).map((r) => (
@@ -152,7 +143,7 @@ export default function MoversBoard({
                 }
                 suffix={
                   b.valueColumn === "years_income_chg" && r.years_income != null
-                    ? `now ${r.years_income.toFixed(1)} yrs`
+                    ? t.movers.now(fmt.years(r.years_income))
                     : null
                 }
                 invert={b.invert}
@@ -188,6 +179,7 @@ function Row({
   suffix?: string | null;
   onSelect: (code: string) => void;
 }) {
+  const { fmt } = useLocale();
   const v = row[column] as number | null;
   // The absolute price on the card follows nominal/real too
   const price = real ? (row.price_4q_real ?? null) : row.price_4q;
@@ -203,16 +195,16 @@ function Row({
         {/* Absolute price + number of sales. Without these two numbers the
             board invites misreading. */}
         <span className="row__meta num">
-          {row.price_4q != null ? fmtKrM2(row.price_4q) : "—"}
+          {price != null ? fmt.krM2(price) : "—"}
           {suffix
             ? ` · ${suffix}`
             : row.n_sold_4q != null
-              ? ` · ${fmtInt(row.n_sold_4q)} sales`
+              ? ` · ${fmt.sales(row.n_sold_4q)}`
               : ""}
         </span>
       </span>
       <span className={`row__v num ${trendClass(v, invert)}`}>
-        {v != null && Number.isFinite(v) ? FMT[column](v) : "—"}
+        {v != null && Number.isFinite(v) ? fmt[FMT[column]](v) : "—"}
       </span>
     </button>
   );

@@ -12,18 +12,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { areaSeries, type GeoLevel } from "@/lib/queries";
 import { Eyebrow } from "./Controls";
-import {
-  fmtDays,
-  fmtInt,
-  fmtKrM2,
-  fmtPct,
-  fmtQ,
-  fmtYears,
-  quarterLabel,
-  trendClass,
-  type Category,
-  type PanelRow,
-} from "@/lib/metrics";
+import { trendClass, type Category, type PanelRow } from "@/lib/metrics";
+import { useLocale } from "./LocaleProvider";
 
 type Point = PanelRow & { quarter: string };
 
@@ -50,6 +40,7 @@ export default function AreaCard({
   dbReady: boolean;
   onClose: () => void;
 }) {
+  const { t, fmt, href } = useLocale();
   const [series, setSeries] = useState<Point[] | null>(null);
 
   useEffect(() => {
@@ -81,7 +72,7 @@ export default function AreaCard({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t.card.close}
           style={{ color: "var(--ink-3)", fontSize: 18, lineHeight: 1 }}
         >
           ×
@@ -90,21 +81,13 @@ export default function AreaCard({
 
       {insufficient ? (
         <div className="card__s">
-          {monthlyMode ? (
-            <>
-              Nothing published for {label(category)} here this month — no
-              listings on the market, or too few to report.
-            </>
-          ) : (
-            <>
-          Fewer than 10 {label(category)} sold here in the four quarters to{" "}
-          {quarterLabel(quarter)}
-          {row.n_sold_4q != null ? ` (${fmtInt(row.n_sold_4q)})` : ""}. With a
-          sample that thin, a price per square metre would say more about which
-          handful of homes happened to change hands than about the market. We
-          would rather show nothing.
-            </>
-          )}
+          {monthlyMode
+            ? t.card.nothingThisMonth(t.categories[category].noun)
+            : t.card.tooFew(
+                t.categories[category].noun,
+                quarter,
+                row.n_sold_4q != null ? fmt.int(row.n_sold_4q) : null,
+              )}
         </div>
       ) : (
         <>
@@ -115,24 +98,24 @@ export default function AreaCard({
                     showing them only gives a row of dashes. Show the three
                     measures this month actually has. */}
                 <Stat
-                  k="Homes for sale"
-                  v={row.for_sale != null ? fmtInt(row.for_sale) : "—"}
+                  k={t.card.forSale}
+                  v={row.for_sale != null ? fmt.int(row.for_sale) : "—"}
                 />
                 <Stat
-                  k="Asking price"
+                  k={t.card.asking}
                   v={
                     row.asking_price_m2 != null
-                      ? fmtKrM2(row.asking_price_m2)
+                      ? fmt.krM2(row.asking_price_m2)
                       : "—"
                   }
                 />
                 <Stat
-                  k="Listed so far"
-                  v={row.days_listed != null ? fmtDays(row.days_listed) : "—"}
+                  k={t.card.listed}
+                  v={row.days_listed != null ? fmt.days(row.days_listed) : "—"}
                 />
                 <Stat
-                  k="Stock vs a year ago"
-                  v={row.for_sale_yoy != null ? fmtPct(row.for_sale_yoy) : "—"}
+                  k={t.card.stockYoy}
+                  v={row.for_sale_yoy != null ? fmt.pct(row.for_sale_yoy) : "—"}
                   cls={trendClass(row.for_sale_yoy, true)}
                 />
               </>
@@ -141,43 +124,43 @@ export default function AreaCard({
             {/* The nominal/real switch has to govern this card too, or the
                 map and the card show two prices */}
             <Stat
-              k={real ? "Price, today's kroner" : "Price"}
-              v={price != null ? fmtKrM2(price) : "—"}
+              k={real ? t.card.priceReal : t.card.price}
+              v={price != null ? fmt.krM2(price) : "—"}
             />
             <Stat
-              k={real ? "Year on year, real" : "Year on year"}
-              v={yoy != null ? fmtPct(yoy) : "—"}
+              k={real ? t.card.yoyReal : t.card.yoy}
+              v={yoy != null ? fmt.pct(yoy) : "—"}
               cls={trendClass(yoy)}
             />
             <Stat
-              k="Days on market"
-              v={row.dom_4q != null ? fmtDays(row.dom_4q) : "—"}
+              k={t.card.dom}
+              v={row.dom_4q != null ? fmt.days(row.dom_4q) : "—"}
             />
             <Stat
-              k="Quarters of supply"
+              k={t.card.supply}
               v={
                 row.quarters_of_supply != null
-                  ? fmtQ(row.quarters_of_supply)
+                  ? fmt.q(row.quarters_of_supply)
                   : "—"
               }
             />
             <Stat
-              k="Sales, 4 quarters"
-              v={row.n_sold_4q != null ? fmtInt(row.n_sold_4q) : "—"}
+              k={t.card.sales}
+              v={row.n_sold_4q != null ? fmt.int(row.n_sold_4q) : "—"}
             />
             <Stat
-              k="Asking vs realised"
-              v={row.discount_pct != null ? fmtPct(row.discount_pct) : "—"}
+              k={t.card.gap}
+              v={row.discount_pct != null ? fmt.pct(row.discount_pct) : "—"}
             />
             {/* Income is annual and two years behind prices, so the year goes
                 right on the label rather than in a tooltip. The postal level
                 has no such column and the whole row is absent. */}
             {row.years_income != null && (
               <Stat
-                k={`Years of income${
+                k={`${t.card.yearsIncome}${
                   row.income_year != null ? ` · ${row.income_year}` : ""
                 }`}
-                v={fmtYears(row.years_income)}
+                v={fmt.years(row.years_income)}
               />
             )}
               </>
@@ -186,7 +169,7 @@ export default function AreaCard({
 
           {postnrs.length > 0 && (
             <div className="tip__r" style={{ alignItems: "flex-start" }}>
-              <span>Postal districts</span>
+              <span>{t.card.postnrs}</span>
               <b
                 className="num"
                 style={{ textAlign: "right", fontWeight: 500, maxWidth: 168 }}
@@ -199,8 +182,7 @@ export default function AreaCard({
 
           {row.reliability === "low" && (
             <div className="tip__flag">
-              Low sample · {fmtInt(row.n_sold_4q ?? 0)} sales — shown, but kept
-              off the rankings
+              {t.card.lowSample(fmt.sales(row.n_sold_4q ?? 0))}
             </div>
           )}
 
@@ -210,13 +192,13 @@ export default function AreaCard({
 
       <Link
         className="card__more"
-        href={
+        href={href(
           level === "postnr"
             ? `/area/postnr/${row.area_code}`
-            : `/area/${row.area_code}`
-        }
+            : `/area/${row.area_code}`,
+        )}
       >
-        Full history for {name} →
+        {t.card.more(name)}
       </Link>
     </div>
   );
@@ -230,9 +212,6 @@ function Stat({ k, v, cls }: { k: string; v: string; cls?: string }) {
     </div>
   );
 }
-
-const label = (c: Category) =>
-  c === "house" ? "houses" : c === "flat" ? "flats" : "holiday homes";
 
 /**
  * Price trend sparkline. Draws only the rolling 4-quarter mean price, the
@@ -248,12 +227,13 @@ function Spark({
   dbReady: boolean;
   real: boolean;
 }) {
+  const { t, fmt } = useLocale();
   if (!dbReady) {
     return (
       <div style={{ marginTop: 10 }}>
         <span className="loading">
           <span className="loading__dot" />
-          Loading history…
+          {t.card.loading}
         </span>
       </div>
     );
@@ -287,7 +267,10 @@ function Spark({
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         style={{ display: "block", height: H }}
-        aria-label={`Price from ${pts[0].quarter} to ${pts[pts.length - 1].quarter}`}
+        aria-label={t.card.sparkAria(
+          fmt.quarter(pts[0].quarter),
+          fmt.quarter(pts[pts.length - 1].quarter),
+        )}
       >
         <path
           d={`${d} L${W},${H} L0,${H} Z`}
@@ -300,8 +283,8 @@ function Spark({
         className="tip__r"
         style={{ marginTop: 2, fontSize: 10.5, color: "var(--ink-3)" }}
       >
-        <span className="num">{pts[0].quarter}</span>
-        <span className="num">{pts[pts.length - 1].quarter}</span>
+        <span className="num">{fmt.quarter(pts[0].quarter)}</span>
+        <span className="num">{fmt.quarter(pts[pts.length - 1].quarter)}</span>
       </div>
     </div>
   );

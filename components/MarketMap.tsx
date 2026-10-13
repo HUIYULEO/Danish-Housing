@@ -18,11 +18,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import maplibregl, { type Map as MlMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { asset } from "@/lib/paths";
+import { useLocale } from "./LocaleProvider";
 import {
   colorFor,
   palette,
-  RELIABILITY_NOTE,
-  fmtInt,
   type Domains,
   type Metric,
   type PanelRow,
@@ -191,6 +190,7 @@ export default function MarketMap({
   level,
   theme,
 }: Props) {
+  const { t, fmt } = useLocale();
   const holder = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const resizeObs = useRef<ResizeObserver | null>(null);
@@ -238,8 +238,7 @@ export default function MarketMap({
     m.addControl(
       new maplibregl.AttributionControl({
         compact: true,
-        customAttribution:
-          "Boundaries: DAWA / Styrelsen for Dataforsyning og Infrastruktur · Data: Finans Danmark, Danmarks Statistik",
+        customAttribution: t.map.attribution,
       }),
       "bottom-right",
     );
@@ -566,7 +565,10 @@ export default function MarketMap({
     if (!hover) return null;
     const r = rowsRef.current.get(hover.code);
     const mt = metricRef.current;
-    const note = r ? RELIABILITY_NOTE[r.reliability as Reliability] : null;
+    const note =
+      r && r.reliability !== "ok"
+        ? t.reliability[r.reliability as Exclude<Reliability, "ok">]
+        : null;
     const value = r && r.reliability !== "insufficient" ? r[mt.column] : null;
 
     return (
@@ -599,8 +601,8 @@ export default function MarketMap({
         </div>
         {r?.n_sold_4q != null && (
           <div className="tip__r">
-            <span>Sales, 4 quarters</span>
-            <b className="num">{fmtInt(r.n_sold_4q)}</b>
+            <span>{t.card.sales}</span>
+            <b className="num">{fmt.int(r.n_sold_4q)}</b>
           </div>
         )}
         {note && (
@@ -611,20 +613,20 @@ export default function MarketMap({
           >
             {note}
             {r?.reliability === "low" && r.n_sold_4q != null
-              ? ` · ${fmtInt(r.n_sold_4q)} sales`
+              ? ` · ${fmt.sales(r.n_sold_4q)}`
               : ""}
           </div>
         )}
       </div>
     );
-  }, [hover, postnrByKommune]);
+  }, [hover, postnrByKommune, t, fmt]);
 
   return (
     <>
       <div
         ref={holder}
         style={{ position: "absolute", inset: 0 }}
-        aria-label={`Map of Denmark showing ${metric.label} by ${level} for ${quarter}`}
+        aria-label={t.map.aria(metric.label, level, quarter)}
         role="img"
       />
       {tip()}

@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { monthLabel, quarterLabel } from "@/lib/metrics";
+import { useLocale } from "./LocaleProvider";
 
 const STEP_MS = 260;
 // Monthly has twelve steps a year; at the same pace twenty years would take
@@ -37,8 +37,9 @@ export default function Timeline({
   onSpanChange: (s: "10y" | "all") => void;
   disabled?: boolean;
 }) {
+  const { t, fmt } = useLocale();
   const i = Math.max(0, quarters.indexOf(value));
-  const label = (t: string) => (monthly ? monthLabel(t) : quarterLabel(t));
+  const label = (tick: string) => (monthly ? fmt.month(tick) : fmt.quarter(tick));
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Playback advances one step at a time and stops at the end.
@@ -72,7 +73,8 @@ export default function Timeline({
   // the ten-year view, one every ten years in the full view, so the amount
   // of text on the axis is about the same either way
   const every = span === "10y" ? 2 : 10;
-  const isJan = (t: string) => (monthly ? t.endsWith("M01") : t.endsWith("Q1"));
+  const isJan = (tick: string) =>
+    monthly ? tick.endsWith("M01") : tick.endsWith("Q1");
   const marks = quarters
     .map((q, idx) => ({ q, idx }))
     .filter(({ q }) => isJan(q) && Number(q.slice(0, 4)) % every === 0);
@@ -84,8 +86,14 @@ export default function Timeline({
         className="timeline__play"
         onClick={handlePlay}
         disabled={disabled}
-        aria-label={playing ? "Pause" : "Play through time"}
-        title={playing ? "Pause" : i >= quarters.length - 1 ? "Play from the start" : "Play through time"}
+        aria-label={playing ? t.timeline.pause : t.timeline.play}
+        title={
+          playing
+            ? t.timeline.pause
+            : i >= quarters.length - 1
+              ? t.timeline.playFromStart
+              : t.timeline.play
+        }
       >
         {playing ? (
           <svg width="10" height="11" viewBox="0 0 10 11" aria-hidden>
@@ -109,7 +117,7 @@ export default function Timeline({
           step={1}
           value={i}
           disabled={disabled}
-          aria-label="Quarter"
+          aria-label={t.timeline.quarter}
           aria-valuetext={label(value)}
           onChange={(e) => onChange(quarters[Number(e.target.value)])}
         />
@@ -132,11 +140,11 @@ export default function Timeline({
         </div>
       </div>
 
-      <div className="seg" role="group" aria-label="Timeline span">
+      <div className="seg" role="group" aria-label={t.timeline.span}>
         {(
           [
-            ["10y", "10Y"],
-            ["all", monthly ? "Since 2004" : "Since 1992"],
+            ["10y", t.timeline.tenYears],
+            ["all", t.timeline.since(monthly ? 2004 : 1992)],
           ] as const
         ).map(([id, label]) => (
           <button

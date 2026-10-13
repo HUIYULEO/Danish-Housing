@@ -16,6 +16,8 @@ import {
 import Ticker, { type Facts, type Monthly } from "./Ticker";
 import AreaSearch, { type SearchArea } from "./AreaSearch";
 import ThemeToggle, { useTheme } from "./ThemeToggle";
+import { useLocale } from "./LocaleProvider";
+import type { Fmt } from "@/lib/format";
 import { getConnection } from "@/lib/db";
 import {
   mapSlice,
@@ -30,19 +32,13 @@ import {
   type ViewState,
 } from "@/lib/viewstate";
 import {
-  METRIC_BY_ID,
+  metricOf,
   metricsFor,
   resolveMetric,
   hasRealVariant,
   GEO_LEVELS,
   WINDOWS,
   shiftQuarter,
-  fmtKrM2,
-  fmtPct,
-  fmtDays,
-  fmtInt,
-  fmtQ,
-  monthLabel,
   type Category,
   type Domains,
   type Frequency,
@@ -80,6 +76,7 @@ export default function Explorer({
   postnrAreas,
 }: Props) {
   const [theme, themeChoice, setThemeChoice] = useTheme();
+  const { t, fmt, locale } = useLocale();
 
   const [freq, setFreq] = useState<Frequency>("quarter");
   const [level, setLevel] = useState<GeoLevel>("kommune");
@@ -109,7 +106,11 @@ export default function Explorer({
   );
 
   const isMonthly = freq === "month";
-  const metric = resolveMetric(METRIC_BY_ID[metricId], real && !isMonthly);
+  const metric = resolveMetric(
+    metricOf(metricId, locale),
+    real && !isMonthly,
+    locale,
+  );
   const activeDomains = isMonthly ? domainsMonthly : domains;
 
   // On a frequency change, switch the metric to the first one in the new
@@ -316,8 +317,8 @@ export default function Explorer({
   const visible = rows;
   const colored = visible.filter((r) => r.reliability !== "insufficient").length;
   const national = useMemo(
-    () => summarise(visible, real, isMonthly),
-    [visible, real, isMonthly],
+    () => summarise(visible, real, fmt),
+    [visible, real, fmt],
   );
   const onSelect = useCallback((code: string | null) => setSelected(code), []);
 
@@ -361,7 +362,7 @@ export default function Explorer({
   // so the first non-null value is enough.
   const incomeYear =
     visible.find((r) => r.income_year != null)?.income_year ?? null;
-  const timeLabel = isMonthly ? monthLabel(month) : quarter.replace("Q", " Q");
+  const timeLabel = isMonthly ? fmt.month(month) : fmt.quarter(quarter);
 
   return (
     <>
@@ -371,26 +372,26 @@ export default function Explorer({
         {/* In monthly mode the quarterly columns are all empty; show what this month actually has */}
         {isMonthly ? (
           <>
-            <Cell k="Median asking price" v={national.asking} />
-            <Cell k="Homes for sale" v={national.stock} d="all areas" />
-            <Cell k="Median days listed" v={national.listed} />
-            <Cell k="Stock vs a year ago" v={national.stockYoy} />
+            <Cell k={t.ribbon.asking} v={national.asking} />
+            <Cell k={t.ribbon.forSale} v={national.stock} d={t.ribbon.allAreas} />
+            <Cell k={t.ribbon.listed} v={national.listed} />
+            <Cell k={t.ribbon.stockYoy} v={national.stockYoy} />
           </>
         ) : (
           <>
             <Cell
-              k={real ? "All Denmark · real price" : "All Denmark · price"}
+              k={real ? t.ribbon.priceReal : t.ribbon.price}
               v={national.price}
             />
-            <Cell k="Year on year" v={national.yoy} d="median area" />
-            <Cell k="Median days on market" v={national.dom} />
-            <Cell k="Sales, 4 quarters" v={national.sales} />
-            <Cell k="Quarters of supply" v={national.supply} />
+            <Cell k={t.ribbon.yoy} v={national.yoy} d={t.ribbon.medianArea} />
+            <Cell k={t.ribbon.dom} v={national.dom} />
+            <Cell k={t.ribbon.sales} v={national.sales} />
+            <Cell k={t.ribbon.supply} v={national.supply} />
           </>
         )}
-        <Cell k={`${levelLabel} shown`} v={`${colored} / ${visible.length}`} />
+        <Cell k={t.ribbon.shown(levelLabel)} v={`${colored} / ${visible.length}`} />
         <div className="ribbon__cell ribbon__cell--search">
-          <div className="ribbon__k">Find an area</div>
+          <div className="ribbon__k">{t.ribbon.find}</div>
           <AreaSearch
             areas={searchAreas}
             onPick={pickArea}
@@ -398,7 +399,7 @@ export default function Explorer({
           />
         </div>
         <div className="ribbon__cell">
-          <div className="ribbon__k">Theme</div>
+          <div className="ribbon__k">{t.ribbon.theme}</div>
           <div style={{ marginTop: 4 }}>
             <ThemeToggle choice={themeChoice} onChange={setThemeChoice} />
           </div>
@@ -480,37 +481,36 @@ export default function Explorer({
             quarterly. So this is a frequency switch, not quarterly data
             interpolated to monthly. */}
         <Segmented
-          label="Data"
+          label={t.controls.data}
           value={freq}
           onChange={(v) => setFreq(v as Frequency)}
           disabled={!dbReady}
           options={[
             {
               id: "quarter",
-              label: "Quarterly · sold",
-              title:
-                "Realised transaction prices. The only frequency they exist at.",
+              label: t.controls.quarterly,
+              title: t.controls.quarterlyTitle,
             },
             {
               id: "month",
-              label: "Monthly · listed",
+              label: t.controls.monthly,
               disabled: level === "postnr",
               title:
                 level === "postnr"
-                  ? "Listing statistics stop at kommune level — there is no monthly postal-district table."
-                  : "Listings: stock, asking price, days waiting. Four months fresher, but not sales.",
+                  ? t.controls.monthlyTitlePostnr
+                  : t.controls.monthlyTitle,
             },
           ]}
         />
         <Segmented
-          label="Areas"
+          label={t.controls.areas}
           value={level}
           onChange={(v) => setLevel(v as GeoLevel)}
           disabled={!dbReady}
           options={GEO_LEVELS.map((l) => ({
             id: l.id,
             label: l.label,
-            title: l.note,
+            title: t.levels[l.id].note,
           }))}
         />
         <MetricPicker
@@ -529,16 +529,16 @@ export default function Explorer({
         )}
         {metricId === "growth" && (
           <Segmented
-            label="Change over"
+            label={t.controls.changeOver}
             value={windowId}
             onChange={setWindowId}
             disabled={!dbReady}
-            options={WINDOWS.map((w) => ({ id: w.id, label: w.label }))}
+            options={WINDOWS.map((w) => ({ id: w.id, label: t.windows[w.id] }))}
           />
         )}
         {dbError && (
           <span className="ctl__label" style={{ color: "var(--accent)" }}>
-            History unavailable — {dbError}
+            {t.controls.historyUnavailable} — {dbError}
           </span>
         )}
       </div>
@@ -579,7 +579,7 @@ function Cell({ k, v, d }: { k: string; v: string; d?: string }) {
  * twelve years are officially published; there is just no volume to check
  * the sample against.
  */
-function summarise(rows: PanelRow[], real: boolean, monthly = false) {
+function summarise(rows: PanelRow[], real: boolean, fmt: Fmt) {
   const ok = rows.filter((r) => r.reliability !== "insufficient");
   const med = (get: (r: PanelRow) => number | null | undefined) => {
     const v = ok
@@ -604,14 +604,14 @@ function summarise(rows: PanelRow[], real: boolean, monthly = false) {
   const stkYoy = med((r) => r.for_sale_yoy);
 
   return {
-    price: p != null ? fmtKrM2(p) : "—",
-    yoy: y != null ? fmtPct(y) : "—",
-    dom: d != null ? fmtDays(d) : "—",
-    sales: s ? fmtInt(s) : "—",
-    supply: q != null ? fmtQ(q) : "—",
-    asking: ask != null ? fmtKrM2(ask) : "—",
-    listed: lst != null ? fmtDays(lst) : "—",
-    stock: stk ? fmtInt(stk) : "—",
-    stockYoy: stkYoy != null ? fmtPct(stkYoy) : "—",
+    price: p != null ? fmt.krM2(p) : "—",
+    yoy: y != null ? fmt.pct(y) : "—",
+    dom: d != null ? fmt.days(d) : "—",
+    sales: s ? fmt.int(s) : "—",
+    supply: q != null ? fmt.q(q) : "—",
+    asking: ask != null ? fmt.krM2(ask) : "—",
+    listed: lst != null ? fmt.days(lst) : "—",
+    stock: stk ? fmt.int(stk) : "—",
+    stockYoy: stkYoy != null ? fmt.pct(stkYoy) : "—",
   };
 }

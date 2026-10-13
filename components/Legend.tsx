@@ -1,6 +1,8 @@
 "use client";
 
 import { binsFor, type Domains, type Metric, type Theme } from "@/lib/metrics";
+import type { Messages } from "@/lib/messages";
+import { useLocale } from "./LocaleProvider";
 
 /**
  * The legend. Discrete colour blocks with the break value marked between
@@ -28,6 +30,7 @@ export default function Legend({
   category: string;
   theme: Theme;
 }) {
+  const { t } = useLocale();
   const domain = domains[category]?.[metric.column];
   const bins = binsFor(metric, domain, theme);
   if (!bins) return null;
@@ -43,14 +46,14 @@ export default function Legend({
       <div
         className="legend__bins"
         role="img"
-        aria-label={`${metric.label} colour scale`}
+        aria-label={t.legend.scale(metric.label)}
       >
         {colors.map((c, i) => (
           <span
             key={i}
             className="legend__bin"
             style={{ background: c }}
-            title={binTitle(metric, breaks, i)}
+            title={binTitle(t, metric, breaks, i)}
           />
         ))}
       </div>
@@ -78,14 +81,14 @@ export default function Legend({
 
       <div className="legend__gray">
         <span className="legend__swatch" aria-hidden />
-        <span>No data published for this area</span>
+        <span>{t.legend.noData}</span>
       </div>
     </div>
   );
 }
 
-function binTitle(metric: Metric, breaks: number[], i: number): string {
-  if (i === 0) return `under ${metric.format(breaks[0])}`;
-  if (i === breaks.length) return `${metric.format(breaks[i - 1])} and above`;
-  return `${metric.format(breaks[i - 1])} to ${metric.format(breaks[i])}`;
+function binTitle(t: Messages, metric: Metric, breaks: number[], i: number): string {
+  if (i === 0) return t.legend.under(metric.format(breaks[0]));
+  if (i === breaks.length) return t.legend.above(metric.format(breaks[i - 1]));
+  return t.legend.range(metric.format(breaks[i - 1]), metric.format(breaks[i]));
 }

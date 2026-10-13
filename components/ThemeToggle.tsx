@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useLocale } from "./LocaleProvider";
 
 export type ThemeChoice = "auto" | "light" | "dark";
 export type Theme = "light" | "dark";
@@ -51,13 +52,14 @@ export default function ThemeToggle({
   choice: ThemeChoice;
   onChange: (c: ThemeChoice) => void;
 }) {
+  const { t } = useLocale();
   const opts: { id: ThemeChoice; label: string; title: string }[] = [
-    { id: "light", label: "☀", title: "Light" },
-    { id: "auto", label: "A", title: "Follow system" },
-    { id: "dark", label: "☾", title: "Dark" },
+    { id: "light", label: "☀", title: t.theme.light },
+    { id: "auto", label: "A", title: t.theme.auto },
+    { id: "dark", label: "☾", title: t.theme.dark },
   ];
   return (
-    <div className="themetoggle" role="group" aria-label="Colour theme">
+    <div className="themetoggle" role="group" aria-label={t.theme.aria}>
       {opts.map((o) => (
         <button
           key={o.id}

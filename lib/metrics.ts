@@ -13,6 +13,10 @@
  *      (price_4q / yoy_pct), never a single quarter.
  */
 
+import { formatters, type FmtKey } from "./format";
+import type { Locale } from "./i18n";
+import { MESSAGES } from "./messages";
+
 export type Category = "house" | "flat" | "holiday";
 export type Reliability = "ok" | "low" | "unverified" | "insufficient";
 export type MetricId =
@@ -85,10 +89,10 @@ export type DomainKey =
 
 export type Domains = Record<string, Partial<Record<DomainKey, [number, number]>>>;
 
-export interface Metric {
+/** The language-independent half of a metric. Its text and formatting are
+ *  joined on per language in metricOf(). */
+interface MetricSpec {
   id: MetricId;
-  label: string;
-  short: string;
   column: DomainKey;
   kind: "sequential" | "diverging";
   /**
@@ -105,126 +109,28 @@ export interface Metric {
   /** true = the larger the value, the "hotter" the colour. Days on market and
    *  quarters of supply run the other way: fewer days means a hotter market. */
   invert?: boolean;
+  format: FmtKey;
+  /** Tick text for the legend */
+  tick: FmtKey;
+}
+
+export interface Metric extends Omit<MetricSpec, "format" | "tick"> {
+  label: string;
+  short: string;
   unit: string;
   blurb: string;
   format: (v: number) => string;
-  /** Tick text for the two ends and the midpoint of the legend */
   tick: (v: number) => string;
 }
 
-const nf = (d: number) =>
-  new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: d,
-    maximumFractionDigits: d,
-  });
-
-export const fmtKr = (v: number) => `${nf(0).format(Math.round(v))} kr`;
-export const fmtKrM2 = (v: number) => `${nf(0).format(Math.round(v))} kr/m²`;
-export const fmtPct = (v: number) =>
-  `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(1).format(Math.abs(v))}%`;
-export const fmtPp = (v: number) =>
-  `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(1).format(Math.abs(v))} pp`;
-export const fmtDays = (v: number) => `${nf(0).format(Math.round(v))} days`;
-export const fmtDaysDelta = (v: number) =>
-  `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(0).format(Math.abs(Math.round(v)))} d`;
-export const fmtInt = (v: number) => nf(0).format(Math.round(v));
-export const fmtQ = (v: number) => `${nf(1).format(v)}Q`;
-export const fmtYears = (v: number) => `${nf(1).format(v)} years`;
-export const fmtYearsDelta = (v: number) =>
-  `${v > 0 ? "+" : v < 0 ? "−" : ""}${nf(1).format(Math.abs(v))} yr`;
-
-export const METRICS: Metric[] = [
-  {
-    id: "price",
-    label: "Price level",
-    short: "Price",
-    column: "price_4q",
-    kind: "sequential",
-    scale: "log",
-    unit: "kr/m²",
-    blurb:
-      "Realised transaction price per square metre, averaged over the trailing four quarters.",
-    format: fmtKrM2,
-    tick: (v) => `${Math.round(v / 1000)}k`,
-  },
-  {
-    id: "growth",
-    label: "Price growth (YoY)",
-    short: "Growth",
-    column: "yoy_pct",
-    kind: "diverging",
-    unit: "%",
-    blurb:
-      "Change in the trailing-four-quarter average price against the same period a year earlier.",
-    format: fmtPct,
-    tick: (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))}%`,
-  },
-  {
-    id: "dom",
-    label: "Days on market",
-    short: "Days",
-    column: "dom_4q",
-    kind: "sequential",
-    invert: true,
-    unit: "days",
-    blurb:
-      "Median time from listing to sale. Prices lag the market; selling time leads it — this moves first when the market turns.",
-    format: fmtDays,
-    tick: (v) => `${Math.round(v)}d`,
-  },
-  {
-    id: "volume",
-    label: "Transactions",
-    short: "Volume",
-    column: "n_sold_4q",
-    kind: "sequential",
-    scale: "log",
-    unit: "sales",
-    blurb: "Dwellings sold over the trailing four quarters.",
-    format: (v) => `${fmtInt(v)} sales`,
-    tick: (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v)}`),
-  },
-  {
-    id: "supply",
-    label: "Quarters of supply",
-    short: "Supply",
-    column: "quarters_of_supply",
-    kind: "sequential",
-    scale: "sqrt",
-    unit: "quarters",
-    blurb:
-      "Homes for sale at quarter end divided by homes sold that quarter — how long the standing stock would take to clear.",
-    format: fmtQ,
-    tick: (v) => `${nf(1).format(v)}Q`,
-  },
-  {
-    id: "afford",
-    label: "Years of income",
-    short: "Years of income",
-    column: "years_income",
-    kind: "sequential",
-    scale: "log",
-    unit: "years",
-    blurb:
-      "Years of a family's disposable income to buy 100 m² at local prices. " +
-      "Both halves are same-year kroner, so this needs no inflation adjustment — " +
-      "it is the one measure here the nominal/real switch cannot change.",
-    format: fmtYears,
-    tick: (v) => `${nf(1).format(v)}y`,
-  },
-  {
-    id: "gap",
-    label: "Asking vs realised",
-    short: "Gap",
-    column: "discount_pct",
-    kind: "diverging",
-    invert: true,
-    unit: "%",
-    blurb:
-      "How far the realised price landed from the initial asking price. Negative means sellers took less than they asked.",
-    format: fmtPct,
-    tick: (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))}%`,
-  },
+const QUARTERLY: MetricSpec[] = [
+  { id: "price", column: "price_4q", kind: "sequential", scale: "log", format: "krM2", tick: "tickK" },
+  { id: "growth", column: "yoy_pct", kind: "diverging", format: "pct", tick: "tickPct" },
+  { id: "dom", column: "dom_4q", kind: "sequential", invert: true, format: "days", tick: "tickDays" },
+  { id: "volume", column: "n_sold_4q", kind: "sequential", scale: "log", format: "sales", tick: "tickCount" },
+  { id: "supply", column: "quarters_of_supply", kind: "sequential", scale: "sqrt", format: "q", tick: "tickQ" },
+  { id: "afford", column: "years_income", kind: "sequential", scale: "log", format: "years", tick: "tickYears" },
+  { id: "gap", column: "discount_pct", kind: "diverging", invert: true, format: "pct", tick: "tickPct" },
 ];
 
 /**
@@ -239,119 +145,27 @@ export const METRICS: Metric[] = [
  * The upside is that it is four months fresher than the quarterly data, and
  * listings move first while sales follow.
  */
-export const MONTHLY_METRICS: Metric[] = [
-  {
-    id: "stock",
-    label: "Homes for sale",
-    short: "For sale",
-    column: "for_sale",
-    kind: "sequential",
-    scale: "log",
-    unit: "homes",
-    blurb:
-      "Homes standing on the market at the end of the month. Inventory builds before prices move.",
-    format: (v) => `${fmtInt(v)} homes`,
-    tick: (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${Math.round(v)}`),
-  },
-  {
-    id: "asking",
-    label: "Asking price",
-    short: "Asking",
-    column: "asking_price_m2",
-    kind: "sequential",
-    scale: "log",
-    unit: "kr/m²",
-    blurb:
-      "What sellers are asking for homes currently on the market. Higher than realised prices, because expensive homes linger and cheap ones clear.",
-    format: fmtKrM2,
-    tick: (v) => `${Math.round(v / 1000)}k`,
-  },
-  {
-    id: "listed",
-    label: "Days listed so far",
-    short: "Days listed",
-    column: "days_listed",
-    kind: "sequential",
-    invert: true,
-    unit: "days",
-    blurb:
-      "How long the homes still for sale have been waiting. Not time-to-sale — these are the ones that have not sold.",
-    format: fmtDays,
-    tick: (v) => `${Math.round(v)}d`,
-  },
+const MONTHLY: MetricSpec[] = [
+  { id: "stock", column: "for_sale", kind: "sequential", scale: "log", format: "homes", tick: "tickCount" },
+  { id: "asking", column: "asking_price_m2", kind: "sequential", scale: "log", format: "krM2", tick: "tickK" },
+  { id: "listed", column: "days_listed", kind: "sequential", invert: true, format: "days", tick: "tickDays" },
 ];
 
 export const METRIC_BY_ID = Object.fromEntries(
-  [...METRICS, ...MONTHLY_METRICS].map((m) => [m.id, m]),
-) as Record<MetricId, Metric>;
+  [...QUARTERLY, ...MONTHLY].map((m) => [m.id, m]),
+) as Record<MetricId, MetricSpec>;
 
-export const metricsFor = (freq: Frequency, level?: string) => {
-  if (freq === "month") return MONTHLY_METRICS;
-  if (level === "postnr") return METRICS.filter((m) => !NO_POSTNR.includes(m.id));
-  return METRICS;
-};
-
-/**
- * Nominal / real.
- *
- * The timeline runs all the way back to 1992, when the national price was
- * 4,121 kr/m²; today it is 13,672. Nominally that is a 232% rise, but more
- * than half of it is just money losing value: the CPI more than doubled over
- * the same period.
- * Real prices are deflated to latest-quarter kroner with DST's PRIS113, so
- * they read as "what that is in today's money".
- *
- * Only price and price growth have a nominal/real distinction. Days, counts
- * and quarters of supply are not money to begin with.
- */
-export function resolveMetric(metric: Metric, real: boolean): Metric {
-  if (!real) return metric;
-  if (metric.id === "price") {
-    return {
-      ...metric,
-      column: "price_4q_real",
-      label: "Price level, real",
-      blurb:
-        "Realised price per square metre, averaged over four quarters and " +
-        "deflated to today's kroner using the consumer price index.",
-    };
-  }
-  if (metric.id === "growth") {
-    return {
-      ...metric,
-      column: "yoy_real_pct",
-      label: "Price growth, real (YoY)",
-      blurb:
-        "Change in the four-quarter average price against a year earlier, " +
-        "after stripping out consumer price inflation.",
-    };
-  }
-  return metric;
+/** A metric with its text and number formatting in the given language. */
+export function metricOf(id: MetricId, locale: Locale = "en"): Metric {
+  const { format, tick, ...spec } = METRIC_BY_ID[id];
+  const fmt = formatters(locale);
+  return {
+    ...spec,
+    ...MESSAGES[locale].metrics[id],
+    format: fmt[format] as (v: number) => string,
+    tick: fmt[tick] as (v: number) => string,
+  };
 }
-
-/** Whether this metric has a real variant. If not, the switch has no effect on it. */
-export const hasRealVariant = (id: MetricId) => id === "price" || id === "growth";
-
-/** Administrative levels. The numbers for all three come from
- *  BM010/020/030's own rows, not from our aggregation. */
-export const GEO_LEVELS: {
-  id: "landsdel" | "region" | "kommune" | "postnr";
-  label: string;
-  note: string;
-}[] = [
-  {
-    id: "landsdel",
-    label: "Landsdele",
-    note: "11 areas — the level where Zealand, Funen and Jutland separate",
-  },
-  { id: "region", label: "Regioner", note: "5 administrative regions" },
-  { id: "kommune", label: "Kommuner", note: "98 municipalities" },
-  {
-    id: "postnr",
-    label: "Postnumre",
-    note: "605 postal districts — the finest level Finans Danmark publishes",
-  },
-];
 
 /**
  * Metrics the postal level does not have.
@@ -365,10 +179,67 @@ export const GEO_LEVELS: {
  */
 const NO_POSTNR: MetricId[] = ["afford"];
 
-export const CATEGORIES: { id: Category; label: string; note: string }[] = [
-  { id: "house", label: "Houses", note: "Detached and terraced" },
-  { id: "flat", label: "Flats", note: "Owner-occupied flats — an urban market" },
-  { id: "holiday", label: "Holiday homes", note: "Concentrated on the coasts" },
+export const metricsFor = (
+  freq: Frequency,
+  level?: string,
+  locale: Locale = "en",
+): Metric[] =>
+  (freq === "month"
+    ? MONTHLY
+    : level === "postnr"
+      ? QUARTERLY.filter((m) => !NO_POSTNR.includes(m.id))
+      : QUARTERLY
+  ).map((m) => metricOf(m.id, locale));
+
+/**
+ * Nominal / real.
+ *
+ * The timeline runs all the way back to 1992. Nominally the national price
+ * has more than tripled since then, but more than half of that is just money
+ * losing value: the CPI roughly doubled over the same period.
+ * Real prices are deflated to latest-quarter kroner with DST's PRIS113, so
+ * they read as "what that is in today's money".
+ *
+ * Only price and price growth have a nominal/real distinction. Days, counts
+ * and quarters of supply are not money to begin with.
+ */
+export function resolveMetric(
+  metric: Metric,
+  real: boolean,
+  locale: Locale = "en",
+): Metric {
+  if (!real) return metric;
+  const text = MESSAGES[locale].metricsReal;
+  if (metric.id === "price") {
+    return { ...metric, column: "price_4q_real", ...text.price };
+  }
+  if (metric.id === "growth") {
+    return { ...metric, column: "yoy_real_pct", ...text.growth };
+  }
+  return metric;
+}
+
+/** Whether this metric has a real variant. If not, the switch has no effect on it. */
+export const hasRealVariant = (id: MetricId) => id === "price" || id === "growth";
+
+/** Administrative levels. The numbers for all of them come from Finans
+ *  Danmark's own rows, not from our aggregation. The labels are Danish in
+ *  both languages; the notes are in MESSAGES. */
+export const GEO_LEVELS: {
+  id: "landsdel" | "region" | "kommune" | "postnr";
+  label: string;
+}[] = [
+  { id: "landsdel", label: "Landsdele" },
+  { id: "region", label: "Regioner" },
+  { id: "kommune", label: "Kommuner" },
+  { id: "postnr", label: "Postnumre" },
+];
+
+/** Property types, in menu order. Labels are in MESSAGES. */
+export const CATEGORIES: { id: Category }[] = [
+  { id: "house" },
+  { id: "flat" },
+  { id: "holiday" },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -635,20 +506,13 @@ export function trendClass(v: number | null | undefined, invert = false) {
 
 /**
  * Four tiers. The ETL has already computed them into the reliability column;
- * this part only puts them into words.
+ * the wording for each is in MESSAGES.reliability.
  *
  * unverified is the extra tier beyond the PRD's three: volume data only
  * starts in 2004 while prices go back to 1992. Marking those twelve years
  * insufficient would claim "we know too few homes sold there", when we
  * simply lack the number. The difference matters.
  */
-export const RELIABILITY_NOTE: Record<Reliability, string | null> = {
-  ok: null,
-  low: "Low sample",
-  unverified: "Sample size not published before 2004",
-  insufficient: "Insufficient data",
-};
-
 /** Whether a unit can be coloured. Only insufficient is grey. */
 export const canColor = (r: Reliability) => r !== "insufficient";
 
@@ -660,20 +524,6 @@ export const canRank = (r: Reliability) => r === "ok";
 /* ------------------------------------------------------------------ *
  * Quarter helpers
  * ------------------------------------------------------------------ */
-
-export const quarterLabel = (q: string) => q.replace("Q", " Q");
-
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** "2026M07" -> "Jul 2026" */
-export function monthLabel(m: string): string {
-  if (!m || !m.includes("M")) return m;
-  const [y, mm] = m.split("M");
-  return `${MONTH_NAMES[Number(mm) - 1] ?? mm} ${y}`;
-}
 
 /** "2026Q1" -> 8104, for comparisons and subtraction */
 export function quarterIndex(q: string): number {
@@ -689,11 +539,11 @@ export function shiftQuarter(q: string, by: number): string {
 
 /** Time-window buttons. PRD §6.1: there is no monthly price data, so the shortest window is 1 quarter. */
 export const WINDOWS = [
-  { id: "1Q", quarters: 1, label: "1Q" },
-  { id: "4Q", quarters: 4, label: "4Q" },
-  { id: "3Y", quarters: 12, label: "3Y" },
-  { id: "5Y", quarters: 20, label: "5Y" },
-  { id: "10Y", quarters: 40, label: "10Y" },
+  { id: "1Q", quarters: 1 },
+  { id: "4Q", quarters: 4 },
+  { id: "3Y", quarters: 12 },
+  { id: "5Y", quarters: 20 },
+  { id: "10Y", quarters: 40 },
 ] as const;
 
 export type WindowId = (typeof WINDOWS)[number]["id"];
