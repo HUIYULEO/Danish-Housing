@@ -1,0 +1,61 @@
+# Refresh the data once a month.
+#
+# Finans Danmark publishes new listing figures monthly and new sale figures
+# quarterly. This job reruns the ETL, and if anything under public/data
+# changed, commits it and asks the Pages workflow to redeploy.
+#
+# A push made with the workflow's own token does not trigger other workflows,
+# which is why the deploy is started explicitly at the end.
+name: Refresh data
+
+on:
+  schedule:
+    # 05:17 UTC on the 8th: after the monthly release, off the top of the hour
+    - cron: "17 5 8 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests pandas pyarrow
+
+      # Any failed download or changed table layout exits non-zero here, and
+      # nothing below runs: a broken refresh never reaches the site.
+      - run: python dk_housing_etl.py
+
+      - name: Commit if the data changed
+        id: commit
+        run: |
+          git add public/data data/REPORT.md
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          quarter=$(python -c "import json; print(json.load(open('public/data/version.json'))['quarter'])")
+          month=$(python -c "import json; print(json.load(open('public/data/monthly.json'))['latest'])")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh data: sales to ${quarter}, listings to ${month}"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Redeploy
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
