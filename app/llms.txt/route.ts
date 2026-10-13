@@ -25,6 +25,7 @@ Latest quarter: ${SUMMARY_QUARTER}. All figures are official statistics from Fin
 - [Map](${pageUrl("/")}): interactive map by landsdel, region, kommune or postal district
 - [All areas](${pageUrl("/areas/")}): one table with the latest price, growth and selling time for every area, linking to each area page
 - [Data & methods](${pageUrl("/methods/")}): sources, definitions, sample-size rules and known limits
+- [About](${pageUrl("/about/")}): who built it, how it is built, and the source code
 - Area pages: ${pageUrl("/area/")}<kommune code>/ and ${pageUrl("/area/postnr/")}<postal code>/, each stating its latest figures in plain text
 
 ## Findings, ${SUMMARY_QUARTER}

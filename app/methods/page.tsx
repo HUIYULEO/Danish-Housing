@@ -44,6 +44,7 @@ export default function Methods() {
         <nav className="masthead__nav">
           <Link href="/">Map</Link>
           <Link href="/areas">All areas</Link>
+          <Link href="/about">About</Link>
         </nav>
       </header>
 

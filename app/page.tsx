@@ -68,6 +68,7 @@ export default function Home() {
         <nav className="masthead__nav">
           <Link href="/areas">All areas</Link>
           <Link href="/methods">Data &amp; methods</Link>
+          <Link href="/about">About</Link>
         </nav>
       </header>
       <script

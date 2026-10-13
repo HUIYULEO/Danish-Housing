@@ -18,6 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: pageUrl("/"), changeFrequency: "monthly", priority: 1 },
     { url: pageUrl("/areas/"), changeFrequency: "monthly", priority: 0.8 },
     { url: pageUrl("/methods/"), changeFrequency: "yearly", priority: 0.6 },
+    { url: pageUrl("/about/"), changeFrequency: "yearly", priority: 0.5 },
     ...list.map((a) => ({
       url: pageUrl(areaPath(a.code, a.level)),
       changeFrequency: "monthly" as const,

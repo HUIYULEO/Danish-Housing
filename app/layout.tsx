@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/site";
 
 const sans = Archivo({
   subsets: ["latin"],
@@ -17,6 +18,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  // Resolves the share image to an absolute URL. Origin only: Next adds
+  // basePath to file-based metadata images itself.
+  metadataBase: new URL(new URL(SITE_URL).origin),
   title: "Danish Housing — see what is happening in Danish real estate",
   description:
     "Quarterly prices, selling times, transaction volume and supply for all 98 Danish kommuner and 605 postal districts since 1992, from Finans Danmark and Danmarks Statistik.",
@@ -26,6 +30,7 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Danish Housing",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

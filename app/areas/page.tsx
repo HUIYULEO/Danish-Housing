@@ -48,6 +48,7 @@ export default function Areas() {
         <nav className="masthead__nav">
           <Link href="/">Map</Link>
           <Link href="/methods">Data &amp; methods</Link>
+          <Link href="/about">About</Link>
         </nav>
       </header>
 

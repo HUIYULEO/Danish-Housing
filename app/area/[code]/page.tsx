@@ -71,6 +71,7 @@ export default async function AreaPage({
           <Link href="/">Map</Link>
           <Link href="/areas">All areas</Link>
           <Link href="/methods">Data &amp; methods</Link>
+          <Link href="/about">About</Link>
         </nav>
       </header>
 
